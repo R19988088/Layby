@@ -1,0 +1,181 @@
+import AppKit
+import Observation
+import SwiftUI
+import os
+
+@Observable @MainActor
+final class AppCoordinator: NSObject {
+    let settings = AppSettings()
+    let store = ShelfStore()
+    private(set) var hotKeyMessage: String?
+    @ObservationIgnored private(set) lazy var observation = DragObservationService(settings: settings, store: store)
+    @ObservationIgnored private lazy var hotKey = GlobalHotKeyService()
+    @ObservationIgnored private lazy var notch = NotchDropController(store: store, settings: settings)
+    @ObservationIgnored private lazy var shelf = ShelfWindowController(store: store)
+    @ObservationIgnored private var settingsWindow: NSWindow?
+    @ObservationIgnored private var statusItem: NSStatusItem?
+    @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    @ObservationIgnored private var workspaceObservers: [NSObjectProtocol] = []
+    @ObservationIgnored private var pendingHide: Task<Void, Never>?
+    @ObservationIgnored private var dragActivated = false
+    @ObservationIgnored private var automaticPresentation = false
+
+    func start() {
+        installMenus()
+        settings.onChange = { [weak self] in self?.applySettings() }
+        hotKey.onPress = { [weak self] in self?.showShelf() }
+        observation.onActivation = { [weak self] reason, point in self?.activate(reason, point: point) }
+        observation.onActivityChange = { [weak self] active in self?.dragActivityChanged(active) }
+        notch.onActivate = { [weak self] screen in
+            self?.activate(.notch, point: CGPoint(x: screen.frame.midX, y: screen.frame.maxY), screen: screen)
+        }
+        notch.onReceive = { [weak self] screen in
+            self?.activate(.notch, point: CGPoint(x: screen.frame.midX, y: screen.frame.maxY), screen: screen)
+            self?.automaticPresentation = false
+            self?.dragActivityChanged(false)
+        }
+        shelf.destination.onReceive = { [weak self] in
+            self?.automaticPresentation = false
+            self?.dragActivityChanged(false)
+        }
+        shelf.onHide = { [weak self] in self?.pendingHide?.cancel(); self?.notch.hide() }
+        shelf.onBeginMoving = { [weak self] in
+            self?.automaticPresentation = false
+            self?.pendingHide?.cancel()
+            self?.notch.hide()
+        }
+        observation.start()
+        applySettings()
+        observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.resetInteraction() } })
+        for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification, NSWorkspace.didWakeNotification] {
+            workspaceObservers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.resetInteraction() }
+            })
+        }
+        workspaceObservers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.observation.refreshPermission() } })
+        showShelf()
+    }
+
+    func stop() {
+        pendingHide?.cancel()
+        observation.stop()
+        hotKey.stop()
+        notch.hide()
+        shelf.stop()
+        observers.forEach(NotificationCenter.default.removeObserver)
+        workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
+        if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
+    }
+
+    @objc func showShelf() {
+        let dragging = NSEvent.pressedMouseButtons & 1 != 0 || observation.isTracking
+        activate(dragging ? .hotKey : .manual, point: NSEvent.mouseLocation)
+    }
+
+    private func activate(_ reason: ActivationReason, point: CGPoint, screen: NSScreen? = nil) {
+        let manual = reason == .manual
+        pendingHide?.cancel()
+        if !manual, dragActivated, shelf.panel.isVisible { return }
+        if !manual { dragActivated = true }
+        automaticPresentation = !manual && store.items.isEmpty
+        shelf.show(near: point, focus: manual, notchScreen: screen)
+        Logger.activation.debug("Shelf presented; manual=\(manual)")
+    }
+
+    private func dragActivityChanged(_ active: Bool) {
+        pendingHide?.cancel()
+        if active {
+            dragActivated = false
+            notch.setActive(true)
+        } else {
+            // Mouse-up can precede performDragOperation. Keep all targets alive through that callback.
+            pendingHide = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled, let self else { return }
+                self.notch.hide()
+                self.dragActivated = false
+                if self.automaticPresentation, self.store.items.isEmpty, !self.shelf.destination.isReceiving {
+                    self.shelf.hide()
+                }
+            }
+        }
+    }
+
+    private func applySettings() {
+        let status = hotKey.register(settings.hotKeyEnabled ? settings.shortcut : nil)
+        hotKeyMessage = status == 0 ? nil : "快捷键无法注册（\(status)），请更换组合键。"
+        if observation.isTracking { notch.setActive(true) }
+    }
+
+    func changeShortcut(_ shortcut: HotKeyShortcut) {
+        if !settings.hotKeyEnabled { settings.shortcut = shortcut; return }
+        let status = hotKey.register(shortcut)
+        guard status == 0 else { hotKeyMessage = "该组合键不可用（\(status)），已保留原快捷键。"; return }
+        settings.shortcut = shortcut
+        hotKeyMessage = nil
+    }
+
+    func refreshObservation() {
+        observation.stop()
+        observation.start()
+    }
+
+    func openAccessibilitySettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc func showSettings() {
+        if settingsWindow == nil {
+            let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 480, height: 720),
+                                  styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            window.title = "Layby 设置"
+            window.titlebarAppearsTransparent = true
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: SettingsView(settings: settings, coordinator: self))
+            window.center()
+            settingsWindow = window
+        }
+        observation.refreshPermission()
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    private func resetInteraction() {
+        observation.reset()
+        pendingHide?.cancel()
+        notch.hide()
+        dragActivated = false
+        if shelf.panel.isVisible {
+            shelf.show(near: NSEvent.mouseLocation, focus: false)
+        }
+    }
+
+    private func installMenus() {
+        let menu = NSMenu()
+        menu.addItem(withTitle: "显示停放区", action: #selector(showShelf), keyEquivalent: "")
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "设置…", action: #selector(showSettings), keyEquivalent: ",")
+        menu.addItem(.separator())
+        let quit = menu.addItem(withTitle: "退出 Layby", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        for item in menu.items where item.action != nil { item.target = item == quit ? NSApp : self }
+        let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem.button?.image = NSImage(systemSymbolName: "tray.2", accessibilityDescription: "Layby 文件停放区")
+        statusItem.button?.toolTip = "Layby — 临时文件停放区"
+        statusItem.menu = menu
+        self.statusItem = statusItem
+        let main = NSMenu()
+        let applicationItem = main.addItem(withTitle: "Layby", action: nil, keyEquivalent: "")
+        applicationItem.submenu = menu.copy() as? NSMenu
+        let editItem = main.addItem(withTitle: "编辑", action: nil, keyEquivalent: "")
+        let edit = NSMenu(title: "编辑")
+        edit.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "复制", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = edit
+        NSApp.mainMenu = main
+    }
+}

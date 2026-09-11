@@ -1,0 +1,110 @@
+import AppKit
+import SwiftUI
+import UniformTypeIdentifiers
+
+struct DraggableFileView<Content: View>: NSViewRepresentable {
+    let store: ShelfStore
+    let scope: ShelfDragScope
+    @ViewBuilder var content: () -> Content
+
+    func makeNSView(context: Context) -> FileDragView<Content> {
+        FileDragView(store: store, scope: scope, content: content())
+    }
+    func updateNSView(_ view: FileDragView<Content>, context: Context) {
+        view.host.rootView = content()
+        view.scope = scope
+    }
+}
+
+@MainActor
+final class FileDragView<Content: View>: NSView, NSDraggingSource {
+    let host: NSHostingView<Content>
+    let store: ShelfStore
+    var scope: ShelfDragScope
+    private var itemID: UUID? { if case .item(let id) = scope { return id }; return nil }
+    private var mouseDownEvent: NSEvent?
+    private var activeItems: [ShelfItem] = []
+    private var hasStarted = false
+
+    init(store: ShelfStore, scope: ShelfDragScope, content: Content) {
+        self.store = store
+        self.scope = scope
+        host = NSHostingView(rootView: content)
+        host.sizingOptions = []
+        super.init(frame: .zero)
+        host.translatesAutoresizingMaskIntoConstraints = false
+        host.focusRingType = .none
+        focusRingType = .none
+        addSubview(host)
+        NSLayoutConstraint.activate([host.leadingAnchor.constraint(equalTo: leadingAnchor), host.trailingAnchor.constraint(equalTo: trailingAnchor),
+                                     host.topAnchor.constraint(equalTo: topAnchor), host.bottomAnchor.constraint(equalTo: bottomAnchor)])
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func hitTest(_ point: NSPoint) -> NSView? { bounds.contains(convert(point, from: superview)) ? self : nil }
+    override var acceptsFirstResponder: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        mouseDownEvent = event
+        hasStarted = false
+        window?.makeFirstResponder(self)
+        if let itemID {
+            if event.modifierFlags.contains(.command) { store.select(itemID, extending: true) }
+            else if !store.selection.contains(itemID) { store.select(itemID, extending: false) }
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard !hasStarted, let initial = mouseDownEvent,
+              hypot(event.locationInWindow.x - initial.locationInWindow.x,
+                    event.locationInWindow.y - initial.locationInWindow.y) >= 4 else { return }
+        let entries = store.dragItems(for: scope)
+        guard !entries.isEmpty else { return }
+        activeItems = entries
+        let origin = convert(event.locationInWindow, from: nil)
+        let draggingItems = entries.enumerated().compactMap { index, entry -> NSDraggingItem? in
+            guard let url = entry.url, let lease = entry.lease else { return nil }
+            let writer: NSPasteboardWriting
+            if entry.isManaged {
+                let delegate = FilePromiseExport(lease: lease, queue: store.managedFiles.queue)
+                let type = entry.isDirectory ? UTType.folder : (UTType(filenameExtension: url.pathExtension) ?? .data)
+                let provider = NSFilePromiseProvider(fileType: type.identifier, delegate: delegate)
+                provider.userInfo = delegate
+                writer = provider
+            } else { writer = url as NSURL }
+            let item = NSDraggingItem(pasteboardWriter: writer)
+            let offset = CGFloat(min(index, 3)) * 3
+            item.setDraggingFrame(CGRect(x: origin.x - 20 + offset, y: origin.y - 20 - offset, width: 40, height: 40), contents: entry.icon)
+            return item
+        }
+        guard !draggingItems.isEmpty else { return }
+        hasStarted = true
+        store.isDraggingOut = true
+        let session = beginDraggingSession(with: draggingItems, event: event, source: self)
+        session.animatesToStartingPositionsOnCancelOrFail = true
+        session.draggingFormation = .pile
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        mouseDownEvent = nil
+        if !hasStarted, let itemID, !event.modifierFlags.contains(.command) { store.select(itemID, extending: false) }
+    }
+
+    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        context == .outsideApplication ? .copy : []
+    }
+    func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        store.isDraggingOut = false
+        activeItems.removeAll()
+        mouseDownEvent = nil
+        // An unsuccessful destination never removes the user's references.
+    }
+    override func accessibilityPerformPress() -> Bool {
+        guard let itemID else { return false }
+        store.select(itemID, extending: false)
+        return true
+    }
+}

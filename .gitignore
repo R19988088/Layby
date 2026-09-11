@@ -1,0 +1,22 @@
+# macOS metadata
+.DS_Store
+._*
+
+# Swift Package Manager and local builds
+.build/
+build/
+
+# Xcode build output and test results
+DerivedData/
+*.xcarchive/
+*.xcresult/
+*.dSYM/
+*.dSYM.zip
+
+# Xcode per-user settings and source-control metadata
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+
+# Keep shared project settings, schemes, and Package.resolved in version control.
