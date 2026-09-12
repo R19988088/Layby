@@ -44,7 +44,7 @@ final class ShelfQuickLookController: NSObject, @MainActor QLPreviewPanelDataSou
     }
 
     func preview(_ id: UUID) {
-        guard store.presentation.isExpanded, store.readyItems.contains(where: { $0.id == id }) else { return }
+        guard store.presentation.isExpanded, store.visibleReadyItems.contains(where: { $0.id == id }) else { return }
         store.select(id, extending: false)
         _ = show()
     }

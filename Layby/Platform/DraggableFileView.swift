@@ -105,6 +105,10 @@ final class FileDragView<Content: View>: NSView, NSDraggingSource, ShelfFileSele
         let modifiers = mouseDownEvent?.modifierFlags ?? event.modifierFlags
         mouseDownEvent = nil
         if !hasStarted, let itemID, modifiers.intersection([.command, .shift]).isEmpty {
+            if event.clickCount == 2 {
+                store.openFolder(itemID)
+                return
+            }
             store.select(itemID, extending: false)
         }
     }

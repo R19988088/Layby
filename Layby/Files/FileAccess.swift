@@ -7,9 +7,13 @@ final class FileAccessLease: @unchecked Sendable {
     let url: URL
     private let scoped: Bool
     private let managedDirectory: ManagedFileDirectory?
-    init(url: URL, managedDirectory: ManagedFileDirectory? = nil) {
+    private let parent: FileAccessLease?
+    init(url: URL, managedDirectory: ManagedFileDirectory? = nil, parent: FileAccessLease? = nil) {
         self.url = url
         self.managedDirectory = managedDirectory
+        // Child files inherit the original folder's sandbox access and storage
+        // lifetime, including after navigating back or closing the shelf.
+        self.parent = parent
         scoped = url.startAccessingSecurityScopedResource()
     }
     deinit { if scoped { url.stopAccessingSecurityScopedResource() } }

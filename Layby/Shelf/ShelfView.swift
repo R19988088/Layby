@@ -16,14 +16,18 @@ struct ShelfView: View {
     private var countLabel: String { L10n.fileCount(store.items.count) }
     private var summary: String {
         if let selectionSummary = store.selectionSummary { return selectionSummary }
-        let pending = store.items.filter { $0.state == .loading }.count
+        if store.folderBrowser.isLoading { return L10n.text("正在读取文件夹…") }
+        let visible = store.visibleItems
+        let pending = visible.filter { $0.state == .loading }.count
         if pending > 0 { return L10n.format("正在接收 %d 个文件…", pending) }
-        let unavailable = store.items.filter { !$0.state.isReady }.count
+        let unavailable = visible.filter { !$0.state.isReady }.count
         if unavailable > 0 { return L10n.format("%d 个文件不可用", unavailable) }
-        let sizes = store.items.compactMap(\.byteCount)
-        if sizes.count == store.items.count, !sizes.isEmpty {
-            return ByteCountFormatter.string(fromByteCount: sizes.reduce(0, +), countStyle: .file)
+        let sizes = visible.compactMap(\.byteCount)
+        if sizes.count == visible.count, !sizes.isEmpty {
+            let size = ByteCountFormatter.string(fromByteCount: sizes.reduce(0, +), countStyle: .file)
+            return store.isBrowsingFolder ? "\(L10n.fileCount(visible.count)) · \(size)" : size
         }
+        if store.isBrowsingFolder { return L10n.fileCount(visible.count) }
         return L10n.text("拖动单个文件以取出")
     }
 
@@ -31,7 +35,10 @@ struct ShelfView: View {
         VStack(spacing: 0) {
             header
             Group {
-                if store.items.isEmpty { emptyState }
+                if store.isBrowsingFolder && (store.folderBrowser.isLoading || store.folderBrowser.error != nil || store.visibleItems.isEmpty) {
+                    folderStatus
+                }
+                else if store.items.isEmpty { emptyState }
                 else if store.presentation == .stack { stack }
                 else { browser }
             }
@@ -78,9 +85,10 @@ struct ShelfView: View {
     private var headerControls: some View {
         HStack(spacing: 8) {
             if store.presentation.isExpanded {
-                roundButton("chevron.left", label: "返回文件堆叠") { store.present(.stack) }
+                roundButton("chevron.left", label: store.isBrowsingFolder ? "返回上一层" : "返回文件堆叠") { store.goBack() }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(countLabel).font(.system(size: 14, weight: .semibold))
+                    Text(store.folderBrowser.directory?.displayName ?? countLabel)
+                        .font(.system(size: 14, weight: .semibold)).truncationMode(.middle)
                     Text(summary).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 }
                 .lineLimit(1)
@@ -125,6 +133,23 @@ struct ShelfView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private var folderStatus: some View {
+        VStack(spacing: 10) {
+            if store.folderBrowser.isLoading {
+                ProgressView().controlSize(.small)
+                Text(L10n.text("正在读取文件夹…"))
+            } else if let error = store.folderBrowser.error {
+                Text(L10n.text(error)).multilineTextAlignment(.center)
+                Button(L10n.text("重新检查")) { store.reloadFolder() }
+                    .buttonStyle(ShelfSolidButtonStyle()).padding(8)
+            } else {
+                Text(L10n.text("此文件夹为空"))
+            }
+        }
+        .font(.system(size: 12)).foregroundStyle(.secondary)
+        .padding(16).frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private var stack: some View {
         VStack(spacing: 8) {
             DraggableFileView(store: store, scope: .all) {
@@ -161,14 +186,14 @@ struct ShelfView: View {
         ScrollView {
             if store.presentation == .grid {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 128), spacing: 10)], spacing: 12) {
-                    ForEach(store.items) { item in
+                    ForEach(store.visibleItems) { item in
                         fileCell(item, grid: true)
                     }
                 }
                 .padding(.top, 8).padding(.bottom, 12)
             } else {
                 LazyVStack(spacing: 6) {
-                    ForEach(store.items) { item in
+                    ForEach(store.visibleItems) { item in
                         fileCell(item, grid: false)
                     }
                 }
@@ -176,6 +201,7 @@ struct ShelfView: View {
             }
         }
         .scrollIndicators(.automatic)
+        .id(store.folderBrowser.directory?.id)
     }
 
     private func fileCell(_ item: ShelfItem, grid: Bool) -> some View {
@@ -192,6 +218,10 @@ struct ShelfView: View {
         .accessibilityLabel(L10n.format("%@，%@，拖动以取出此文件", item.displayName, item.displaySubtitle))
         .help(item.displayName)
         .contextMenu {
+            if item.isDirectory {
+                Button(L10n.text("打开文件夹")) { store.openFolder(item.id) }
+                    .disabled(!item.state.isReady)
+            }
             Button(L10n.text("快速查看")) { preview(item.id) }
                 .disabled(!item.state.isReady)
             Divider()
@@ -199,7 +229,9 @@ struct ShelfView: View {
                 Button(L10n.text("在 Finder 中显示")) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
                 Button(L10n.text("重新检查")) { store.retry(item.id) }
             }
-            Button(L10n.text("从停放区移除")) { store.remove([item.id]) }
+            if !store.isBrowsingFolder {
+                Button(L10n.text("从停放区移除")) { store.remove([item.id]) }
+            }
             Divider()
             Button(L10n.text("清空停放区")) { store.clear() }
         }

@@ -48,6 +48,7 @@ final class ShelfStore {
     var isDraggingOut = false
     var notice: String?
     private(set) var presentation: ShelfPresentation = .stack { didSet { onPreviewChange?() } }
+    let folderBrowser = ShelfFolderBrowser()
     @ObservationIgnored var onPreviewChange: (() -> Void)?
     @ObservationIgnored private var selectionAnchor: UUID?
     @ObservationIgnored let managedFiles: ManagedFileStore
@@ -63,15 +64,21 @@ final class ShelfStore {
         return queue
     }()
 
-    init(managedFiles: ManagedFileStore = ManagedFileStore()) { self.managedFiles = managedFiles }
+    init(managedFiles: ManagedFileStore = ManagedFileStore()) {
+        self.managedFiles = managedFiles
+        folderBrowser.onChange = { [weak self] in self?.onPreviewChange?() }
+    }
 
     var readyItems: [ShelfItem] { items.filter { $0.state.isReady } }
-    var selectedItems: [ShelfItem] { readyItems.filter { selection.contains($0.id) } }
+    var isBrowsingFolder: Bool { folderBrowser.directory != nil }
+    var visibleItems: [ShelfItem] { isBrowsingFolder ? folderBrowser.items : items }
+    var visibleReadyItems: [ShelfItem] { visibleItems.filter { $0.state.isReady } }
+    var selectedItems: [ShelfItem] { visibleReadyItems.filter { selection.contains($0.id) } }
     var previewItems: [ShelfItem] { presentation.isExpanded ? selectedItems : [] }
-    var exportItems: [ShelfItem] { selection.isEmpty ? readyItems : selectedItems }
+    var exportItems: [ShelfItem] { selection.isEmpty ? visibleReadyItems : selectedItems }
 
     var selectionSummary: String? {
-        let selected = items.filter { selection.contains($0.id) }
+        let selected = visibleItems.filter { selection.contains($0.id) }
         guard !selected.isEmpty else { return nil }
         let sizes = selected.compactMap(\.byteCount)
         let size = sizes.count == selected.count
@@ -83,6 +90,7 @@ final class ShelfStore {
     func clearSelection() { selection.removeAll() }
 
     func present(_ presentation: ShelfPresentation) {
+        if presentation == .stack { resetFolderBrowsing() }
         self.presentation = items.isEmpty ? .stack : presentation
         selection.removeAll()
     }
@@ -93,14 +101,15 @@ final class ShelfStore {
         switch scope {
         case .all: return !items.isEmpty && items.allSatisfy({ $0.state.isReady }) ? items : []
         case .item(let id):
-            guard let item = items.first(where: { $0.id == id }), item.state.isReady else { return [] }
+            guard let item = visibleItems.first(where: { $0.id == id }), item.state.isReady else { return [] }
             guard selection.contains(id) else { return [item] }
-            let selected = items.filter { selection.contains($0.id) }
+            let selected = visibleItems.filter { selection.contains($0.id) }
             return selected.allSatisfy({ $0.state.isReady }) ? selected : []
         }
     }
 
     func select(_ id: UUID, extending: Bool, range: Bool = false) {
+        let items = visibleItems
         guard let end = items.firstIndex(where: { $0.id == id }) else { return }
         if range {
             let anchor = selectionAnchor ?? items.first(where: { selection.contains($0.id) })?.id ?? id
@@ -117,6 +126,7 @@ final class ShelfStore {
     }
 
     func remove(_ ids: Set<UUID>) {
+        if folderBrowser.containsRoot(ids) { resetFolderBrowsing() }
         for id in ids {
             if let request = thumbnails.removeValue(forKey: id) { QLThumbnailGenerator.shared.cancel(request) }
             imports.removeValue(forKey: id)
@@ -130,6 +140,7 @@ final class ShelfStore {
 
     func clear() {
         generation = UUID()
+        resetFolderBrowsing()
         remove(Set(items.map(\.id)))
         importTimeouts.values.forEach { $0.cancel() }
         importTimeouts.removeAll()
@@ -157,6 +168,7 @@ final class ShelfStore {
     }
 
     func retry(_ id: UUID) {
+        if isBrowsingFolder, visibleItems.contains(where: { $0.id == id }) { reloadFolder(); return }
         guard let index = items.firstIndex(where: { $0.id == id }), let lease = items[index].lease else { return }
         items[index].state = .loading
         inspect(id: id, lease: lease, generation: generation)
@@ -177,6 +189,9 @@ final class ShelfStore {
         let urls = objects.compactMap { $0 as? URL }.filter(\.isFileURL)
         let promises = objects.compactMap { $0 as? NSFilePromiseReceiver }
         guard !urls.isEmpty || !promises.isEmpty else { return false }
+        // A shelf drop always parks files at the root; it never writes into a
+        // directory merely because the user happens to be browsing it.
+        resetFolderBrowsing()
         _ = add(urls)
         let acceptedPromises = promises.map { receivePromise($0) }.filter { $0 }.count
         guard !urls.isEmpty || acceptedPromises > 0 else { return false }
@@ -224,7 +239,7 @@ final class ShelfStore {
 
     /// SwiftUI requests previews for visible rows only; the model retains no unbounded global cache.
     func requestThumbnail(_ id: UUID) {
-        guard thumbnails[id] == nil, let item = items.first(where: { $0.id == id }),
+        guard thumbnails[id] == nil, let item = (items + folderBrowser.items).first(where: { $0.id == id }),
               item.state.isReady, !item.isDirectory, let lease = item.lease else { return }
         let request = QLThumbnailGenerator.Request(fileAt: lease.url, size: CGSize(width: 160, height: 180),
                                                   scale: 2, representationTypes: .thumbnail)
@@ -233,10 +248,53 @@ final class ShelfStore {
         QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { [weak self, lease] representation, _ in
             _ = lease
             Task { @MainActor [weak self] in
-                guard let self, self.generation == expected,
-                      let index = self.items.firstIndex(where: { $0.id == id }), let representation else { return }
-                self.items[index].icon = representation.nsImage
+                guard let self, self.generation == expected, let representation else { return }
+                if let index = self.items.firstIndex(where: { $0.id == id }) {
+                    self.items[index].icon = representation.nsImage
+                } else { self.folderBrowser.updateThumbnail(id, image: representation.nsImage) }
             }
+        }
+    }
+
+    func openFolder(_ id: UUID) {
+        guard presentation.isExpanded, let directory = visibleItems.first(where: { $0.id == id }),
+              directory.isDirectory, directory.state.isReady, directory.lease != nil else { return }
+        cancelFolderThumbnails()
+        clearSelection()
+        notice = nil
+        folderBrowser.enter(directory)
+    }
+
+    func goBack() {
+        guard let directory = folderBrowser.directory else { present(.stack); return }
+        cancelFolderThumbnails()
+        clearSelection()
+        folderBrowser.back()
+        if visibleItems.contains(where: { $0.id == directory.id }) { select(directory.id, extending: false) }
+    }
+
+    func reloadFolder() {
+        cancelFolderThumbnails()
+        clearSelection()
+        folderBrowser.reload()
+    }
+
+    func removeSelection() {
+        // Child rows are a directory listing, not independently parked items.
+        guard !isBrowsingFolder else { return }
+        remove(selection)
+    }
+
+    private func resetFolderBrowsing() {
+        guard isBrowsingFolder else { return }
+        cancelFolderThumbnails()
+        clearSelection()
+        folderBrowser.reset()
+    }
+
+    private func cancelFolderThumbnails() {
+        for item in folderBrowser.items {
+            if let request = thumbnails.removeValue(forKey: item.id) { QLThumbnailGenerator.shared.cancel(request) }
         }
     }
 

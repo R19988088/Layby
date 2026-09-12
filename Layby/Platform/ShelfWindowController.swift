@@ -177,8 +177,8 @@ final class ShelfWindowController {
             glass.bottomAnchor.constraint(equalTo: surface.bottomAnchor, constant: -ShelfLayout.shadowInset)
         ])
         panel.onHide = { [weak self] in self?.hide() }
-        panel.onSelectAll = { [weak store] in store?.selection = Set(store?.readyItems.map(\.id) ?? []) }
-        panel.onDelete = { [weak store] in if let store { store.remove(store.selection) } }
+        panel.onSelectAll = { [weak store] in store?.selection = Set(store?.visibleReadyItems.map(\.id) ?? []) }
+        panel.onDelete = { [weak store] in store?.removeSelection() }
         panel.onCopy = { [weak store] in store?.copySelection() }
         panel.onQuickLook = { [weak self] in self?.quickLook.toggle() ?? false }
         panel.dismissQuickLook = { [weak self] in self?.quickLook.dismiss() ?? false }

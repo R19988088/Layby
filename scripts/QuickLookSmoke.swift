@@ -70,6 +70,7 @@ import Quartz
             check(preview?.isVisible == false && store.items.isEmpty, "closing shelf dismisses preview and clears references")
             check(FileManager.default.fileExists(atPath: file.path), "original file survives closing shelf")
             try await checkSelection(shelf: shelf, store: store, root: root, check: check)
+            try await checkFolders(shelf: shelf, store: store, root: root, check: check)
         } catch { check(false, error.localizedDescription) }
         shelf.stop()
         try? FileManager.default.removeItem(at: root)
@@ -137,11 +138,60 @@ import Quartz
         }
     }
 
-    private func postClick(_ point: NSPoint, modifiers: NSEvent.ModifierFlags = [], to window: NSWindow) {
+    private func checkFolders(shelf: ShelfWindowController, store: ShelfStore, root: URL,
+                              check: (Bool, String) -> Void) async throws {
+        shelf.hide()
+        let folder = root.appendingPathComponent("Browse")
+        let nested = folder.appendingPathComponent("Nested")
+        let child = nested.appendingPathComponent("child.txt")
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try Data("child".utf8).write(to: child)
+        store.add([folder])
+        for _ in 0..<200 where store.readyItems.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        let rootIDs = store.items.map(\.id)
+        for mode in [ShelfPresentation.list, .grid] {
+            store.present(mode)
+            shelf.show(near: NSPoint(x: 450, y: 450), focus: true)
+            try await Task.sleep(for: .milliseconds(400))
+            for expectedDepth in 1...2 {
+                guard let row = fileResponder(in: shelf.destination) else {
+                    check(false, "\(mode): folder row exists")
+                    break
+                }
+                let point = row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil)
+                postClick(point, to: shelf.panel)
+                postClick(point, clickCount: 2, to: shelf.panel)
+                try await Task.sleep(for: .milliseconds(400))
+                for _ in 0..<100 where store.folderBrowser.isLoading { try await Task.sleep(for: .milliseconds(10)) }
+                check(store.folderBrowser.depth == expectedDepth, "\(mode): double click enters folder level \(expectedDepth)")
+            }
+            check(store.visibleItems.first?.url?.resolvingSymlinksInPath() == child.resolvingSymlinksInPath(), "\(mode): nested child is displayed")
+            if let id = store.visibleItems.first?.id {
+                store.select(id, extending: false)
+                postKey(49, characters: " ", to: shelf.panel)
+                try await Task.sleep(for: .milliseconds(500))
+                let preview = QLPreviewPanel.shared()
+                check(preview?.currentPreviewItem?.previewItemURL?.resolvingSymlinksInPath() == child.resolvingSymlinksInPath(), "\(mode): Quick Look previews the child")
+                if let preview { postKey(53, characters: "\u{1b}", to: preview) }
+                try await Task.sleep(for: .milliseconds(400))
+            }
+            // Click the actual SwiftUI back button, using its shared layout constants.
+            let inset = ShelfLayout.headerButtonInset + ShelfLayout.headerButtonSize / 2
+            let backPoint = shelf.destination.convert(NSPoint(x: inset, y: shelf.destination.bounds.height - inset), to: nil)
+            for expectedDepth in [1, 0] {
+                postClick(backPoint, to: shelf.panel)
+                try await Task.sleep(for: .milliseconds(400))
+                check(store.folderBrowser.depth == expectedDepth, "\(mode): back button returns to level \(expectedDepth)")
+            }
+            check(store.visibleItems.map(\.id) == rootIDs && store.presentation == mode, "\(mode): root items and layout survive navigation")
+        }
+    }
+
+    private func postClick(_ point: NSPoint, modifiers: NSEvent.ModifierFlags = [], clickCount: Int = 1, to window: NSWindow) {
         for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
             let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: modifiers,
                 timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-                context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)!
+                context: nil, eventNumber: 0, clickCount: clickCount, pressure: type == .leftMouseDown ? 1 : 0)!
             NSApp.postEvent(event, atStart: false)
         }
     }
