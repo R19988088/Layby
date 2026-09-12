@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Layby document</title>
+  <path
+    fill="#F5F9F7"
+    d="M376 232H628L724 328V682C724 706 704 726 680 726H376C352 726 332 706 332 682V276C332 252 352 232 376 232Z"
+  />
+</svg>

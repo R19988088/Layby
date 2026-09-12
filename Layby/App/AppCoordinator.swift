@@ -172,7 +172,13 @@ final class AppCoordinator: NSObject {
         let quit = menu.addItem(withTitle: L10n.text("退出 Layby"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         for item in menu.items where item.action != nil { item.target = item == quit ? NSApp : self }
         let statusItem = self.statusItem ?? NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "tray.2", accessibilityDescription: L10n.text("Layby 文件停放区"))
+        let accessibilityDescription = L10n.text("Layby 文件停放区")
+        let menuBarIcon = (NSImage(named: "MenuBarIcon")?.copy() as? NSImage)
+            ?? Self.drawMenuBarIcon()
+        menuBarIcon.isTemplate = true
+        menuBarIcon.size = NSSize(width: 18, height: 18)
+        menuBarIcon.accessibilityDescription = accessibilityDescription
+        statusItem.button?.image = menuBarIcon
         statusItem.button?.toolTip = L10n.text("Layby — 临时文件停放区")
         statusItem.menu = menu
         self.statusItem = statusItem
@@ -187,5 +193,81 @@ final class AppCoordinator: NSObject {
         edit.addItem(withTitle: L10n.text("全选"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit
         NSApp.mainMenu = main
+    }
+
+    private static func drawMenuBarIcon() -> NSImage {
+        NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
+            NSColor.black.setStroke()
+            let path = NSBezierPath()
+            path.lineWidth = 1.25
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+
+            // 文件主体与折角。
+            path.move(to: NSPoint(x: 5.25, y: 7.3))
+            path.line(to: NSPoint(x: 5.25, y: 2.9))
+            path.curve(to: NSPoint(x: 6.6, y: 1.55),
+                       controlPoint1: NSPoint(x: 5.25, y: 2.15),
+                       controlPoint2: NSPoint(x: 5.85, y: 1.55))
+            path.line(to: NSPoint(x: 10.7, y: 1.55))
+            path.line(to: NSPoint(x: 13.95, y: 4.8))
+            path.line(to: NSPoint(x: 13.95, y: 7.3))
+            path.move(to: NSPoint(x: 10.7, y: 1.55))
+            path.line(to: NSPoint(x: 10.7, y: 3.8))
+            path.curve(to: NSPoint(x: 11.7, y: 4.8),
+                       controlPoint1: NSPoint(x: 10.7, y: 4.35),
+                       controlPoint2: NSPoint(x: 11.15, y: 4.8))
+            path.line(to: NSPoint(x: 13.95, y: 4.8))
+
+            // 后托盘只露出文件两侧的边缘。
+            path.move(to: NSPoint(x: 2.25, y: 8.65))
+            path.line(to: NSPoint(x: 2.25, y: 8.05))
+            path.curve(to: NSPoint(x: 3.85, y: 6.45),
+                       controlPoint1: NSPoint(x: 2.25, y: 7.15),
+                       controlPoint2: NSPoint(x: 2.95, y: 6.45))
+            path.line(to: NSPoint(x: 5.25, y: 6.45))
+            path.move(to: NSPoint(x: 13.95, y: 6.45))
+            path.line(to: NSPoint(x: 14.15, y: 6.45))
+            path.curve(to: NSPoint(x: 15.75, y: 8.05),
+                       controlPoint1: NSPoint(x: 15.05, y: 6.45),
+                       controlPoint2: NSPoint(x: 15.75, y: 7.15))
+            path.line(to: NSPoint(x: 15.75, y: 8.65))
+
+            // 前托盘的凹口对应应用图标中承托文件的位置。
+            path.move(to: NSPoint(x: 2.25, y: 8.7))
+            path.curve(to: NSPoint(x: 3.7, y: 7.25),
+                       controlPoint1: NSPoint(x: 2.25, y: 7.9),
+                       controlPoint2: NSPoint(x: 2.9, y: 7.25))
+            path.line(to: NSPoint(x: 5.25, y: 7.25))
+            path.curve(to: NSPoint(x: 6.48, y: 7.92),
+                       controlPoint1: NSPoint(x: 5.75, y: 7.25),
+                       controlPoint2: NSPoint(x: 6.2, y: 7.5))
+            path.line(to: NSPoint(x: 7.38, y: 9.27))
+            path.curve(to: NSPoint(x: 9.02, y: 10.15),
+                       controlPoint1: NSPoint(x: 7.75, y: 9.82),
+                       controlPoint2: NSPoint(x: 8.36, y: 10.15))
+            path.curve(to: NSPoint(x: 10.66, y: 9.27),
+                       controlPoint1: NSPoint(x: 9.68, y: 10.15),
+                       controlPoint2: NSPoint(x: 10.29, y: 9.82))
+            path.line(to: NSPoint(x: 11.56, y: 7.92))
+            path.curve(to: NSPoint(x: 12.79, y: 7.25),
+                       controlPoint1: NSPoint(x: 11.84, y: 7.5),
+                       controlPoint2: NSPoint(x: 12.29, y: 7.25))
+            path.line(to: NSPoint(x: 14.3, y: 7.25))
+            path.curve(to: NSPoint(x: 15.75, y: 8.7),
+                       controlPoint1: NSPoint(x: 15.1, y: 7.25),
+                       controlPoint2: NSPoint(x: 15.75, y: 7.9))
+            path.line(to: NSPoint(x: 15.75, y: 13.75))
+            path.curve(to: NSPoint(x: 13.05, y: 16.45),
+                       controlPoint1: NSPoint(x: 15.75, y: 15.25),
+                       controlPoint2: NSPoint(x: 14.55, y: 16.45))
+            path.line(to: NSPoint(x: 4.95, y: 16.45))
+            path.curve(to: NSPoint(x: 2.25, y: 13.75),
+                       controlPoint1: NSPoint(x: 3.45, y: 16.45),
+                       controlPoint2: NSPoint(x: 2.25, y: 15.25))
+            path.close()
+            path.stroke()
+            return true
+        }
     }
 }

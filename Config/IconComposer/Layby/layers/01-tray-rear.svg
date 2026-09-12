@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Layby rear tray</title>
+  <path
+    fill="#61CDB7"
+    fill-rule="evenodd"
+    d="M276 466H748C788 466 820 498 820 538V684H204V538C204 498 236 466 276 466ZM298 514C276 514 258 532 258 554V632H766V554C766 532 748 514 726 514H298Z"
+  />
+</svg>

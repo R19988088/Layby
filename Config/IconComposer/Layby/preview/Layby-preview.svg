@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Layby layered icon preview</title>
+  <defs>
+    <linearGradient id="background" x1="170" y1="126" x2="850" y2="912" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6DE6CE"/>
+      <stop offset="0.48" stop-color="#159BA2"/>
+      <stop offset="1" stop-color="#075064"/>
+    </linearGradient>
+    <linearGradient id="rear" x1="270" y1="470" x2="740" y2="690" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B9F5E4"/>
+      <stop offset="1" stop-color="#4EC6B4"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="370" y1="230" x2="680" y2="726" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E6F1EF"/>
+    </linearGradient>
+    <linearGradient id="front" x1="275" y1="490" x2="730" y2="810" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C9FAEC" stop-opacity="0.96"/>
+      <stop offset="0.55" stop-color="#8FE2CF" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#61C9BA" stop-opacity="0.94"/>
+    </linearGradient>
+    <filter id="tileShadow" x="20" y="20" width="984" height="984" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#002F3A" flood-opacity="0.32"/>
+    </filter>
+    <filter id="objectShadow" x="150" y="180" width="724" height="700" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#003944" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <rect x="72" y="72" width="880" height="880" rx="202" fill="url(#background)" filter="url(#tileShadow)"/>
+  <g filter="url(#objectShadow)">
+    <path fill="url(#rear)" fill-rule="evenodd" d="M276 466H748C788 466 820 498 820 538V684H204V538C204 498 236 466 276 466ZM298 514C276 514 258 532 258 554V632H766V554C766 532 748 514 726 514H298Z"/>
+    <path fill="url(#paper)" d="M376 232H628L724 328V682C724 706 704 726 680 726H376C352 726 332 706 332 682V276C332 252 352 232 376 232Z"/>
+    <path fill="#D7EAE7" d="M628 232L724 328H674C648.6 328 628 307.4 628 282V232Z"/>
+    <path fill="url(#front)" stroke="#DBFFF5" stroke-width="8" stroke-linejoin="round" d="M204 550C204 514 233.2 484 270 484H326C352 484 374 497 389 519L429 577C442 596 464 608 487 608H537C560 608 582 596 595 577L635 519C650 497 672 484 698 484H754C790.8 484 820 514 820 550V704C820 762 773 809 715 809H309C251 809 204 762 204 704V550Z"/>
+  </g>
+</svg>
