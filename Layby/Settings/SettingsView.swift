@@ -69,7 +69,7 @@ struct SettingsView: View {
             Section {
                 Toggle(L10n.text("启用快捷键"), isOn: $settings.hotKeyEnabled)
                 HStack {
-                    Text(L10n.text("显示停放区"))
+                    Text(L10n.text("新建停放区"))
                     Spacer()
                     ShortcutRecorder(shortcut: settings.shortcut) { coordinator.changeShortcut($0) }
                         .frame(width: 160, height: 28).disabled(!settings.hotKeyEnabled)

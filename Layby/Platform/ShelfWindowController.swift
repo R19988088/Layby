@@ -64,7 +64,7 @@ final class ShelfSurfaceView: NSView {
         let center = CGPoint(x: layer.bounds.width * (0.5 - layer.anchorPoint.x),
                              y: layer.bounds.height * (0.5 - layer.anchorPoint.y))
         // Uniform scaling preserves the window's shape; one overshoot settles directly to 100%.
-        let scales: [CGFloat] = [0.72, 1.035, 1]
+        let scales: [CGFloat] = [0.38, 1.06, 1]
         let scaleAnimation = CAKeyframeAnimation(keyPath: "transform")
         scaleAnimation.values = scales.map { scale in
             var transform = CATransform3DMakeScale(scale, scale, 1)
@@ -72,17 +72,17 @@ final class ShelfSurfaceView: NSView {
             transform.m42 = center.y * (1 - scale)
             return NSValue(caTransform3D: transform)
         }
-        // 225 ms to grow, followed by a single 135 ms settle.
-        scaleAnimation.keyTimes = [0, 0.625, 1]
+        // About 280 ms to grow visibly from a small surface, then a single 140 ms settle.
+        scaleAnimation.keyTimes = [0, 0.67, 1]
         scaleAnimation.timingFunctions = [
             CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .easeInEaseOut)
         ]
-        scaleAnimation.duration = 0.36
+        scaleAnimation.duration = 0.42
 
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 0
         fade.toValue = 1
-        fade.duration = 0.10
+        fade.duration = 0.06
         fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
         fade.fillMode = .forwards
 

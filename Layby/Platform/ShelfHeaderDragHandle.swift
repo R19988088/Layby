@@ -3,7 +3,7 @@ import QuartzCore
 import SwiftUI
 
 enum ShelfLayout {
-    static let size = CGSize(width: 220, height: 220)
+    static let size = CGSize(width: 200, height: 220)
     static let expandedSize = CGSize(width: 500, height: 360)
     static let cornerRadius: CGFloat = 26
     static let headerButtonSize: CGFloat = 30
@@ -95,13 +95,13 @@ final class HeaderDragView: NSView {
     }
 
     override func resetCursorRects() {
-        addCursorRect(bounds, cursor: isDraggingWindow ? .closedHand : .openHand)
+        addCursorRect(bounds, cursor: .arrow)
     }
 
     override func mouseEntered(with event: NSEvent) {
         isHovered = true
         updateGrip(animated: true)
-        if !isDraggingWindow { NSCursor.openHand.set() }
+        NSCursor.arrow.set()
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -115,8 +115,7 @@ final class HeaderDragView: NSView {
         onBeginDragging?()
         isDraggingWindow = true
         updateGrip(animated: true)
-        NSCursor.closedHand.set()
-        window.invalidateCursorRects(for: self)
+        NSCursor.arrow.set()
 
         // Window Server handles the original press, including holds, screen edges and Spaces.
         // performDrag returns immediately and may consume mouseUp, so watch release only while moving.
@@ -142,8 +141,7 @@ final class HeaderDragView: NSView {
         guard isDraggingWindow else { return }
         isDraggingWindow = false
         refreshHover(animated: true)
-        window?.invalidateCursorRects(for: self)
-        if isHovered { NSCursor.openHand.set() } else { NSCursor.arrow.set() }
+        NSCursor.arrow.set()
     }
 
     private func refreshHover(animated: Bool) {

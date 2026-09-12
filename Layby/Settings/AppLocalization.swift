@@ -63,7 +63,7 @@ final class L10n {
         "按住修饰键并拖拽": "Hold a modifier while dragging", "修饰键": "Modifier key",
         "先按住修饰键再拖拽，或拖拽途中按住，都可以呼出。": "Hold the modifier before or during a file drag to show the shelf.",
         "拖到刘海区域": "Drag to the notch", "无刘海时使用屏幕顶部中央": "Use the top center on displays without a notch",
-        "全局快捷键": "Global Shortcut", "启用快捷键": "Enable shortcut", "显示停放区": "Show Shelf",
+        "全局快捷键": "Global Shortcut", "启用快捷键": "Enable shortcut", "新建停放区": "New Shelf",
         "点击键位后按下新组合键，Esc 取消。": "Click the shortcut, then press a new combination. Esc cancels.",
         "兼容性": "Compatibility", "已识别的拖拽": "Detected drags", "%d 次": "%d",
         "辅助功能访问": "Accessibility access", "已允许": "Allowed", "未允许": "Not allowed",

@@ -165,7 +165,7 @@ final class AppCoordinator: NSObject {
 
     private func installMenus() {
         let menu = NSMenu()
-        menu.addItem(withTitle: L10n.text("显示停放区"), action: #selector(showShelf), keyEquivalent: "")
+        menu.addItem(withTitle: L10n.text("新建停放区"), action: #selector(showShelf), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: L10n.text("设置…"), action: #selector(showSettings), keyEquivalent: ",")
         menu.addItem(.separator())
