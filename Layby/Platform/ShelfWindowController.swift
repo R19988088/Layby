@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 
 @MainActor
@@ -30,6 +31,7 @@ final class ShelfPanel: NSPanel {
 /// A transparent window surface with an explicit rounded shadow, independent of key state.
 @MainActor
 final class ShelfSurfaceView: NSView {
+    private static let appearanceAnimationKey = "layby.appearance"
     override var isOpaque: Bool { false }
 
     override init(frame frameRect: NSRect) {
@@ -46,8 +48,53 @@ final class ShelfSurfaceView: NSView {
 
     override func layout() {
         super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         layer?.shadowPath = CGPath(roundedRect: bounds.insetBy(dx: ShelfLayout.shadowInset, dy: ShelfLayout.shadowInset),
                                   cornerWidth: ShelfLayout.cornerRadius, cornerHeight: ShelfLayout.cornerRadius, transform: nil)
+        CATransaction.commit()
+    }
+
+    func animateAppearance(reduceMotion: Bool) {
+        stopAppearanceAnimation()
+        guard !reduceMotion, let layer else { return }
+
+        // Animate the presentation layer only: layout and the native drop target already
+        // occupy their final bounds. Compensate for AppKit's layer anchor without moving it.
+        let center = CGPoint(x: layer.bounds.width * (0.5 - layer.anchorPoint.x),
+                             y: layer.bounds.height * (0.5 - layer.anchorPoint.y))
+        // Uniform scaling preserves the window's shape; one overshoot settles directly to 100%.
+        let scales: [CGFloat] = [0.72, 1.035, 1]
+        let scaleAnimation = CAKeyframeAnimation(keyPath: "transform")
+        scaleAnimation.values = scales.map { scale in
+            var transform = CATransform3DMakeScale(scale, scale, 1)
+            transform.m41 = center.x * (1 - scale)
+            transform.m42 = center.y * (1 - scale)
+            return NSValue(caTransform3D: transform)
+        }
+        // 225 ms to grow, followed by a single 135 ms settle.
+        scaleAnimation.keyTimes = [0, 0.625, 1]
+        scaleAnimation.timingFunctions = [
+            CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .easeInEaseOut)
+        ]
+        scaleAnimation.duration = 0.36
+
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0
+        fade.toValue = 1
+        fade.duration = 0.10
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        fade.fillMode = .forwards
+
+        let appearance = CAAnimationGroup()
+        appearance.animations = [scaleAnimation, fade]
+        appearance.duration = scaleAnimation.duration
+        layer.add(appearance, forKey: Self.appearanceAnimationKey)
+    }
+
+    func stopAppearanceAnimation() {
+        // Model-layer geometry and opacity never change, so interruption restores them immediately.
+        layer?.removeAnimation(forKey: Self.appearanceAnimationKey)
     }
 }
 
@@ -57,6 +104,7 @@ final class ShelfWindowController {
     let destination: DropDestinationView
     private let store: ShelfStore
     private let glass: NSGlassEffectView
+    private let surface: ShelfSurfaceView
     private var accessibilityObserver: NSObjectProtocol?
     var onHide: (() -> Void)?
     var onBeginMoving: (() -> Void)?
@@ -88,7 +136,7 @@ final class ShelfWindowController {
         glass.layer?.masksToBounds = true
         glass.focusRingType = .none
         glass.contentView = destination
-        let surface = ShelfSurfaceView(frame: CGRect(origin: .zero, size: ShelfLayout.windowSize))
+        surface = ShelfSurfaceView(frame: CGRect(origin: .zero, size: ShelfLayout.windowSize))
         panel.contentView = surface
         glass.translatesAutoresizingMaskIntoConstraints = false
         surface.addSubview(glass)
@@ -113,7 +161,10 @@ final class ShelfWindowController {
     private func installShelfContent() {
         guard destination.subviews.isEmpty else { return }
         let host = NSHostingView(rootView: ShelfView(store: store,
-            hide: { [weak self] in self?.hide() }, beginMoving: { [weak self] in self?.onBeginMoving?() },
+            hide: { [weak self] in self?.hide() }, beginMoving: { [weak self] in
+                self?.surface.stopAppearanceAnimation()
+                self?.onBeginMoving?()
+            },
             presentationChanged: { [weak self] in self?.resizeForPresentation() }))
         host.sizingOptions = []
         host.translatesAutoresizingMaskIntoConstraints = false
@@ -130,6 +181,7 @@ final class ShelfWindowController {
         let frame = ShelfGeometry.resizedFrame(panel.frame, size: ShelfLayout.windowSize(for: store.presentation),
                                                in: screen.visibleFrame.insetBy(dx: 12, dy: 12))
         guard frame != panel.frame else { return }
+        surface.stopAppearanceAnimation()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.22
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -138,6 +190,8 @@ final class ShelfWindowController {
     }
 
     func show(near point: CGPoint, focus: Bool, notchScreen: NSScreen? = nil) {
+        let wasVisible = panel.isVisible
+        surface.stopAppearanceAnimation()
         installShelfContent()
         store.refreshReferences()
         let screen = notchScreen ?? NSScreen.screens.first { $0.frame.contains(point) } ?? NSScreen.main
@@ -151,11 +205,16 @@ final class ShelfWindowController {
             }
             panel.setFrame(frame, display: true)
         }
+        surface.layoutSubtreeIfNeeded()
+        if !wasVisible {
+            surface.animateAppearance(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        }
         panel.orderFrontRegardless()
         if focus { panel.makeKey() }
     }
 
     func hide() {
+        surface.stopAppearanceAnimation()
         panel.orderOut(nil)
         panel.makeFirstResponder(nil)
         store.clear()
@@ -170,6 +229,7 @@ final class ShelfWindowController {
     }
 
     private func updateAccessibility() {
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { surface.stopAppearanceAnimation() }
         destination.wantsLayer = true
         destination.layer?.backgroundColor = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
             ? NSColor.windowBackgroundColor.cgColor : NSColor.clear.cgColor
