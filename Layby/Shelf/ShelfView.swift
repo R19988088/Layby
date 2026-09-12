@@ -49,6 +49,7 @@ struct ShelfView: View {
         }
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background { ShelfGlassChrome() }
         .overlay {
             ShelfDropBorder(isTargeted: store.isDropTargeted)
                 .allowsHitTesting(false)
@@ -219,8 +220,6 @@ private struct ShelfDropBorder: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: ShelfLayout.cornerRadius)
-                .strokeBorder(.white.opacity(0.22), lineWidth: 0.75)
             if isTargeted {
                 Group {
                     if reduceMotion {
