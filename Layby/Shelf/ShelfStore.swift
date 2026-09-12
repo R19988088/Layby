@@ -37,12 +37,13 @@ struct ShelfItem: Identifiable {
 
 @Observable @MainActor
 final class ShelfStore {
-    private(set) var items: [ShelfItem] = []
-    var selection: Set<UUID> = []
+    private(set) var items: [ShelfItem] = [] { didSet { onPreviewChange?() } }
+    var selection: Set<UUID> = [] { didSet { onPreviewChange?() } }
     var isDropTargeted = false
     var isDraggingOut = false
     var notice: String?
-    private(set) var presentation: ShelfPresentation = .stack
+    private(set) var presentation: ShelfPresentation = .stack { didSet { onPreviewChange?() } }
+    @ObservationIgnored var onPreviewChange: (() -> Void)?
     @ObservationIgnored let managedFiles: ManagedFileStore
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var imports: [UUID: NSFilePromiseReceiver] = [:]
@@ -60,6 +61,7 @@ final class ShelfStore {
 
     var readyItems: [ShelfItem] { items.filter { $0.state.isReady } }
     var selectedItems: [ShelfItem] { readyItems.filter { selection.contains($0.id) } }
+    var previewItems: [ShelfItem] { presentation.isExpanded ? selectedItems : [] }
     var exportItems: [ShelfItem] { selection.isEmpty ? readyItems : selectedItems }
 
     func present(_ presentation: ShelfPresentation) {

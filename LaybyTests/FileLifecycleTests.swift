@@ -80,6 +80,83 @@ struct FileLifecycleTests {
         }
     }
 
+    @Test func quickLookOnlyUsesReadySelectionInExpandedViews() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("preview.txt")
+        try Data("preview".utf8).write(to: file)
+        let store = ShelfStore(managedFiles: ManagedFileStore(root: root.appendingPathComponent("managed")))
+        store.add([file, root.appendingPathComponent("missing.txt")])
+        await settle(store)
+        let readyID = try #require(store.readyItems.first?.id)
+        store.selection = Set(store.items.map(\.id))
+        #expect(store.previewItems.isEmpty)
+        for mode in [ShelfPresentation.grid, .list] {
+            store.present(mode)
+            #expect(store.previewItems.isEmpty)
+            store.selection = Set(store.items.map(\.id))
+            #expect(store.previewItems.map(\.id) == [readyID])
+        }
+        var changed = false
+        store.onPreviewChange = { changed = true }
+        store.remove([readyID])
+        #expect(changed)
+        #expect(store.previewItems.isEmpty)
+    }
+
+    @Test func quickLookRetainsPromisedFileUntilPreviewItemIsReleased() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let managed = ManagedFileStore(root: root)
+        let store = ShelfStore(managedFiles: managed)
+        var directory: ManagedFileDirectory? = try managed.makeDestination()
+        let destination = try #require(directory?.url)
+        let file = destination.appendingPathComponent("preview.txt")
+        try Data("preview".utf8).write(to: file)
+        store.add([file], managedDirectory: directory)
+        directory = nil
+        await settle(store)
+        var preview = store.items.first.flatMap(ShelfPreviewItem.init)
+        #expect(preview?.previewItemTitle == "preview.txt")
+        store.clear()
+        #expect(try String(contentsOf: try #require(preview?.previewItemURL), encoding: .utf8) == "preview")
+        preview = nil
+        await waitForRemoval(destination)
+        #expect(!FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    @Test func quickLookKeysRespectModifiersAndEscapeDoesNotCloseShelf() {
+        _ = NSApplication.shared
+        let panel = ShelfPanel(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: false)
+        var opened = 0
+        var closedShelf = 0
+        var previewVisible = false
+        panel.onQuickLook = { opened += 1; previewVisible = true; return true }
+        panel.onHide = { closedShelf += 1 }
+        panel.dismissQuickLook = {
+            guard previewVisible else { return false }
+            previewVisible = false
+            return true
+        }
+        func space(_ modifiers: NSEvent.ModifierFlags = [], repeating: Bool = false) -> NSEvent {
+            NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0,
+                windowNumber: 0, context: nil, characters: " ", charactersIgnoringModifiers: " ",
+                isARepeat: repeating, keyCode: 49)!
+        }
+        for modifier in [NSEvent.ModifierFlags.command, .control, .option, .shift] {
+            #expect(!panel.handleQuickLookKey(space(modifier)))
+        }
+        #expect(opened == 0)
+        #expect(panel.performKeyEquivalent(with: space()))
+        #expect(panel.handleQuickLookKey(space(repeating: true)))
+        #expect(opened == 1)
+        panel.cancelOperation(nil)
+        #expect(!previewVisible)
+        #expect(closedShelf == 0)
+        panel.cancelOperation(nil)
+        #expect(closedShelf == 1)
+    }
+
     @Test func closeRoutesClearTheShelfAndKeepOriginals() async throws {
         _ = NSApplication.shared
         let root = try fixture()

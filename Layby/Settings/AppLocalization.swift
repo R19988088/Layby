@@ -88,6 +88,7 @@ final class L10n {
         "展开，查看和拖出单个文件": "Expand to view and drag individual files", "查看全部 %@": "View all %@",
         "%@，%@，拖动以取出此文件": "%@, %@. Drag to take out this file",
         "在 Finder 中显示": "Reveal in Finder", "从停放区移除": "Remove from Shelf", "清空停放区": "Clear Shelf",
+        "快速查看": "Quick Look",
         "正在接收": "Receiving", "文件不可用": "File unavailable", "文件夹": "Folder", "正在读取…": "Reading…",
         "正在接收文件": "Receiving file", "等待来源应用…": "Waiting for source app…", "无法访问": "Unavailable",
         "接收失败": "Transfer failed", "接收超时": "Transfer timed out",

@@ -1,5 +1,6 @@
 import AppKit
 import QuartzCore
+import Quartz
 import SwiftUI
 
 @MainActor
@@ -8,12 +9,32 @@ final class ShelfPanel: NSPanel {
     var onDelete: (() -> Void)?
     var onSelectAll: (() -> Void)?
     var onCopy: (() -> Void)?
+    var onQuickLook: (() -> Bool)?
+    var dismissQuickLook: (() -> Bool)?
+    weak var quickLook: ShelfQuickLookController?
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     override func close() { onHide?() }
     override func performClose(_ sender: Any?) { close() }
-    override func cancelOperation(_ sender: Any?) { onHide?() }
+    override func cancelOperation(_ sender: Any?) {
+        if dismissQuickLook?() != true { onHide?() }
+    }
+    override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { quickLook?.hasItems == true }
+    override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) { quickLook?.beginControl(panel) }
+    override func endPreviewPanelControl(_ panel: QLPreviewPanel!) { quickLook?.endControl(panel) }
+
+    override func keyDown(with event: NSEvent) {
+        if handleQuickLookKey(event) { return }
+        super.keyDown(with: event)
+    }
+
+    func handleQuickLookKey(_ event: NSEvent) -> Bool {
+        guard ShelfQuickLookController.isToggleKey(event) else { return false }
+        // Holding Space must not repeatedly open and close the panel.
+        return event.isARepeat || onQuickLook?() == true
+    }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if handleQuickLookKey(event) { return true }
         if event.modifierFlags.contains(.command) {
             switch event.charactersIgnoringModifiers?.lowercased() {
             case "a": onSelectAll?(); return true
@@ -22,7 +43,7 @@ final class ShelfPanel: NSPanel {
             default: break
             }
         }
-        if event.keyCode == 53 { onHide?(); return true }
+        if event.keyCode == 53 { cancelOperation(nil); return true }
         if event.keyCode == 51 || event.keyCode == 117 { onDelete?(); return true }
         return super.performKeyEquivalent(with: event)
     }
@@ -105,6 +126,7 @@ final class ShelfWindowController {
     private let store: ShelfStore
     private let glass: NSGlassEffectView
     private let surface: ShelfSurfaceView
+    private let quickLook: ShelfQuickLookController
     private var accessibilityObserver: NSObjectProtocol?
     var onHide: (() -> Void)?
     var onBeginMoving: (() -> Void)?
@@ -113,6 +135,8 @@ final class ShelfWindowController {
         self.store = store
         panel = ShelfPanel(contentRect: CGRect(origin: .zero, size: ShelfLayout.windowSize),
                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        quickLook = ShelfQuickLookController(store: store, shelfPanel: panel)
+        panel.quickLook = quickLook
         panel.title = L10n.text("Layby 文件停放区")
         panel.level = .floating
         panel.isFloatingPanel = true
@@ -150,6 +174,8 @@ final class ShelfWindowController {
         panel.onSelectAll = { [weak store] in store?.selection = Set(store?.readyItems.map(\.id) ?? []) }
         panel.onDelete = { [weak store] in if let store { store.remove(store.selection) } }
         panel.onCopy = { [weak store] in store?.copySelection() }
+        panel.onQuickLook = { [weak self] in self?.quickLook.toggle() ?? false }
+        panel.dismissQuickLook = { [weak self] in self?.quickLook.dismiss() ?? false }
         installShelfContent()
         updateAccessibility()
         accessibilityObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -165,7 +191,8 @@ final class ShelfWindowController {
                 self?.surface.stopAppearanceAnimation()
                 self?.onBeginMoving?()
             },
-            presentationChanged: { [weak self] in self?.resizeForPresentation() }))
+            presentationChanged: { [weak self] in self?.resizeForPresentation() },
+            preview: { [weak self] id in self?.quickLook.preview(id) }))
         host.sizingOptions = []
         host.translatesAutoresizingMaskIntoConstraints = false
         host.focusRingType = .none
@@ -214,6 +241,7 @@ final class ShelfWindowController {
     }
 
     func hide() {
+        quickLook.dismiss()
         surface.stopAppearanceAnimation()
         panel.orderOut(nil)
         panel.makeFirstResponder(nil)
@@ -225,6 +253,7 @@ final class ShelfWindowController {
     }
     func stop() {
         hide()
+        quickLook.stop()
         if let accessibilityObserver { NSWorkspace.shared.notificationCenter.removeObserver(accessibilityObserver) }
     }
 

@@ -6,6 +6,7 @@ struct ShelfView: View {
     let hide: () -> Void
     let beginMoving: () -> Void
     let presentationChanged: () -> Void
+    let preview: (UUID) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -184,6 +185,9 @@ struct ShelfView: View {
         .accessibilityLabel(L10n.format("%@，%@，拖动以取出此文件", item.displayName, item.displaySubtitle))
         .help(item.displayName)
         .contextMenu {
+            Button(L10n.text("快速查看")) { preview(item.id) }
+                .disabled(!item.state.isReady)
+            Divider()
             if let url = item.url {
                 Button(L10n.text("在 Finder 中显示")) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
                 Button(L10n.text("重新检查")) { store.retry(item.id) }

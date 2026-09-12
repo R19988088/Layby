@@ -19,13 +19,22 @@ final class DropDestinationView: NSView {
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         let operation = allowedOperation(sender)
-        if operation != [] { store.isDropTargeted = true; onEnter?() }
+        if operation != [] {
+            stackDraggingItems(sender)
+            store.isDropTargeted = true
+            onEnter?()
+        }
         return operation
     }
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
         let operation = allowedOperation(sender)
         store.isDropTargeted = operation != []
+        if operation != [] { stackDraggingItems(sender) }
         return operation
+    }
+    override func updateDraggingItemsForDrag(_ sender: NSDraggingInfo?) {
+        guard let sender, allowedOperation(sender) != [] else { return }
+        stackDraggingItems(sender)
     }
     override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { allowedOperation(sender) != [] }
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
@@ -37,6 +46,14 @@ final class DropDestinationView: NSView {
     }
     override func draggingExited(_ sender: NSDraggingInfo?) { store.isDropTargeted = false; onExit?() }
     override func draggingEnded(_ sender: NSDraggingInfo) { store.isDropTargeted = false }
+
+    private func stackDraggingItems(_ sender: NSDraggingInfo) {
+        guard (sender.draggingPasteboard.pasteboardItems?.count ?? 0) > 1,
+              sender.draggingFormation != .pile else { return }
+        // Change the native drag images while hovering, before importing anything.
+        // AppKit owns the transition and restores the source's formation on exit.
+        sender.draggingFormation = .pile
+    }
 
     private func allowedOperation(_ sender: NSDraggingInfo) -> NSDragOperation {
         guard !store.isDraggingOut, sender.draggingSourceOperationMask.contains(.copy),
