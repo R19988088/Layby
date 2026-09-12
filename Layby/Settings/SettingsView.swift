@@ -34,8 +34,11 @@ struct SettingsView: View {
                 .listStyle(.sidebar).scrollContentBackground(.hidden)
             }
             .frame(width: 180)
-            .background(.regularMaterial)
-            Divider()
+            .frame(maxHeight: .infinity)
+            // Extend only the material behind the traffic lights; sidebar
+            // content keeps the title-bar safe area and remains below them.
+            .background(.regularMaterial, ignoresSafeAreaEdges: .vertical)
+            Divider().ignoresSafeArea(.container, edges: .vertical)
             VStack(alignment: .leading, spacing: 0) {
                 Text(L10n.text(selectedPage.title)).font(.system(size: 22, weight: .semibold))
                     .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 8)
@@ -43,6 +46,7 @@ struct SettingsView: View {
                 else { generalSettings }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .windowBackgroundColor), ignoresSafeAreaEdges: .vertical)
         }
         .frame(minWidth: 700, maxWidth: .infinity, minHeight: 520, maxHeight: .infinity)
     }

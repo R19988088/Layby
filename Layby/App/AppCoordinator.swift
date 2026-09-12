@@ -139,10 +139,12 @@ final class AppCoordinator: NSObject {
         if NSApp.activationPolicy() != .accessory { NSApp.setActivationPolicy(.accessory) }
         if settingsWindow == nil {
             let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 760, height: 600),
-                                  styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+                                  styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
             window.title = L10n.text("Layby 设置")
+            window.titleVisibility = .hidden
             window.contentMinSize = CGSize(width: 700, height: 520)
             window.titlebarAppearsTransparent = true
+            window.titlebarSeparatorStyle = .none
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: SettingsView(settings: settings, coordinator: self))
             window.center()
