@@ -15,6 +15,7 @@ struct ShelfView: View {
     }
     private var countLabel: String { L10n.fileCount(store.items.count) }
     private var summary: String {
+        if let selectionSummary = store.selectionSummary { return selectionSummary }
         let pending = store.items.filter { $0.state == .loading }.count
         if pending > 0 { return L10n.format("正在接收 %d 个文件…", pending) }
         let unavailable = store.items.filter { !$0.state.isReady }.count
@@ -36,6 +37,11 @@ struct ShelfView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, 12)
+            .background {
+                if store.presentation.isExpanded {
+                    ShelfSelectionBackground(store: store).allowsHitTesting(false)
+                }
+            }
             if let notice = store.notice {
                 Text(L10n.text(notice)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
                     .padding(.horizontal, 12).padding(.top, 6).accessibilityLabel(L10n.text(notice))

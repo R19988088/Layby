@@ -38,12 +38,18 @@ struct ShelfItem: Identifiable {
 @Observable @MainActor
 final class ShelfStore {
     private(set) var items: [ShelfItem] = [] { didSet { onPreviewChange?() } }
-    var selection: Set<UUID> = [] { didSet { onPreviewChange?() } }
+    var selection: Set<UUID> = [] {
+        didSet {
+            if selection.isEmpty { selectionAnchor = nil }
+            onPreviewChange?()
+        }
+    }
     var isDropTargeted = false
     var isDraggingOut = false
     var notice: String?
     private(set) var presentation: ShelfPresentation = .stack { didSet { onPreviewChange?() } }
     @ObservationIgnored var onPreviewChange: (() -> Void)?
+    @ObservationIgnored private var selectionAnchor: UUID?
     @ObservationIgnored let managedFiles: ManagedFileStore
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var imports: [UUID: NSFilePromiseReceiver] = [:]
@@ -64,23 +70,50 @@ final class ShelfStore {
     var previewItems: [ShelfItem] { presentation.isExpanded ? selectedItems : [] }
     var exportItems: [ShelfItem] { selection.isEmpty ? readyItems : selectedItems }
 
+    var selectionSummary: String? {
+        let selected = items.filter { selection.contains($0.id) }
+        guard !selected.isEmpty else { return nil }
+        let sizes = selected.compactMap(\.byteCount)
+        let size = sizes.count == selected.count
+            ? ByteCountFormatter.string(fromByteCount: sizes.reduce(0, +), countStyle: .file)
+            : L10n.text("大小未知")
+        return L10n.format("已选择 %d 个文件 · %@", selected.count, size)
+    }
+
+    func clearSelection() { selection.removeAll() }
+
     func present(_ presentation: ShelfPresentation) {
         self.presentation = items.isEmpty ? .stack : presentation
         selection.removeAll()
     }
 
-    /// The stack is an all-files operation; a card always exports only its own file.
+    /// Dragging a selected card exports the selection in display order. An
+    /// unselected card exports itself; incomplete groups never export partially.
     func dragItems(for scope: ShelfDragScope) -> [ShelfItem] {
         switch scope {
         case .all: return !items.isEmpty && items.allSatisfy({ $0.state.isReady }) ? items : []
-        case .item(let id): return readyItems.filter { $0.id == id }
+        case .item(let id):
+            guard let item = items.first(where: { $0.id == id }), item.state.isReady else { return [] }
+            guard selection.contains(id) else { return [item] }
+            let selected = items.filter { selection.contains($0.id) }
+            return selected.allSatisfy({ $0.state.isReady }) ? selected : []
         }
     }
 
-    func select(_ id: UUID, extending: Bool) {
+    func select(_ id: UUID, extending: Bool, range: Bool = false) {
+        guard let end = items.firstIndex(where: { $0.id == id }) else { return }
+        if range {
+            let anchor = selectionAnchor ?? items.first(where: { selection.contains($0.id) })?.id ?? id
+            let start = items.firstIndex(where: { $0.id == anchor }) ?? end
+            let ids = Set(items[min(start, end)...max(start, end)].map(\.id))
+            selectionAnchor = items[start].id
+            selection = extending ? selection.union(ids) : ids
+            return
+        }
         if extending {
             if selection.contains(id) { selection.remove(id) } else { selection.insert(id) }
         } else { selection = [id] }
+        selectionAnchor = selection.contains(id) ? id : items.first(where: { selection.contains($0.id) })?.id
     }
 
     func remove(_ ids: Set<UUID>) {
@@ -91,6 +124,7 @@ final class ShelfStore {
         }
         items.removeAll { ids.contains($0.id) }
         selection.subtract(ids)
+        if let selectionAnchor, ids.contains(selectionAnchor) { self.selectionAnchor = nil }
         if items.isEmpty { presentation = .stack }
     }
 

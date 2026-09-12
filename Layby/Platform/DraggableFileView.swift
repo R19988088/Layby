@@ -2,6 +2,9 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Identifies native file hit areas even though their SwiftUI content is generic.
+@MainActor protocol ShelfFileSelectionTarget: AnyObject {}
+
 struct DraggableFileView<Content: View>: NSViewRepresentable {
     let store: ShelfStore
     let scope: ShelfDragScope
@@ -17,7 +20,7 @@ struct DraggableFileView<Content: View>: NSViewRepresentable {
 }
 
 @MainActor
-final class FileDragView<Content: View>: NSView, NSDraggingSource {
+final class FileDragView<Content: View>: NSView, NSDraggingSource, ShelfFileSelectionTarget {
     let host: NSHostingView<Content>
     let store: ShelfStore
     var scope: ShelfDragScope
@@ -57,7 +60,10 @@ final class FileDragView<Content: View>: NSView, NSDraggingSource {
         hasStarted = false
         window?.makeFirstResponder(self)
         if let itemID {
-            if event.modifierFlags.contains(.command) { store.select(itemID, extending: true) }
+            if event.modifierFlags.contains(.shift) {
+                store.select(itemID, extending: event.modifierFlags.contains(.command), range: true)
+            }
+            else if event.modifierFlags.contains(.command) { store.select(itemID, extending: true) }
             else if !store.selection.contains(itemID) { store.select(itemID, extending: false) }
         }
     }
@@ -94,8 +100,13 @@ final class FileDragView<Content: View>: NSView, NSDraggingSource {
     }
 
     override func mouseUp(with event: NSEvent) {
+        // Use the modifiers at mouse-down: releasing Shift before the mouse must
+        // not collapse the range we just selected.
+        let modifiers = mouseDownEvent?.modifierFlags ?? event.modifierFlags
         mouseDownEvent = nil
-        if !hasStarted, let itemID, !event.modifierFlags.contains(.command) { store.select(itemID, extending: false) }
+        if !hasStarted, let itemID, modifiers.intersection([.command, .shift]).isEmpty {
+            store.select(itemID, extending: false)
+        }
     }
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {

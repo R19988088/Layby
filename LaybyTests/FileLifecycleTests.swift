@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import SwiftUI
 @testable import LaybyKit
 
 @MainActor @Suite(.serialized)
@@ -17,7 +18,74 @@ struct FileLifecycleTests {
         }
     }
 
-    @Test func stackExportsAllAndCardExportsOnlyItself() async throws {
+    @Test func shiftSelectionExtendsShrinksAndResetsItsAnchor() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let files = (0..<5).map { root.appendingPathComponent("range-\($0).txt") }
+        for file in files { try Data("file".utf8).write(to: file) }
+        let store = ShelfStore(managedFiles: ManagedFileStore(root: root.appendingPathComponent("managed")))
+        store.add(files)
+        await settle(store)
+        let ids = store.items.map(\.id)
+        store.select(ids[1], extending: false)
+        store.select(ids[4], extending: false, range: true)
+        #expect(store.selection == Set(ids[1...4]))
+        store.select(ids[2], extending: false, range: true)
+        #expect(store.selection == Set(ids[1...2]))
+        store.select(ids[0], extending: false, range: true)
+        #expect(store.selection == Set(ids[0...1]))
+        store.select(ids[4], extending: true)
+        store.select(ids[3], extending: true, range: true)
+        #expect(store.selection == Set([ids[0], ids[1], ids[3], ids[4]]))
+        store.clearSelection()
+        store.select(ids[2], extending: false, range: true)
+        #expect(store.selection == [ids[2]])
+        store.remove([ids[2]])
+        store.select(ids[4], extending: false, range: true)
+        #expect(store.selection == [ids[4]])
+    }
+
+    @Test func releasingShiftBeforeMouseUpPreservesTheRange() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let files = (0..<3).map { root.appendingPathComponent("click-\($0).txt") }
+        for file in files { try Data("file".utf8).write(to: file) }
+        let store = ShelfStore(managedFiles: ManagedFileStore(root: root.appendingPathComponent("managed")))
+        store.add(files)
+        await settle(store)
+        let ids = store.items.map(\.id)
+        let row = FileDragView(store: store, scope: .item(ids[2]), content: Text("test"))
+        store.select(ids[0], extending: false)
+        let down = NSEvent.mouseEvent(with: .leftMouseDown, location: .zero, modifierFlags: .shift,
+            timestamp: 0, windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        let up = NSEvent.mouseEvent(with: .leftMouseUp, location: .zero, modifierFlags: [],
+            timestamp: 1, windowNumber: 0, context: nil, eventNumber: 1, clickCount: 1, pressure: 0)!
+        row.mouseDown(with: down)
+        row.mouseUp(with: up)
+        #expect(store.selection == Set(ids))
+    }
+
+    @Test func selectionSummaryCountsOnlySelectedFilesAndHandlesUnknownSizes() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let files = (0..<3).map { root.appendingPathComponent("size-\($0).txt") }
+        for (index, file) in files.enumerated() { try Data(repeating: 65, count: (index + 1) * 100).write(to: file) }
+        let store = ShelfStore(managedFiles: ManagedFileStore(root: root.appendingPathComponent("managed")))
+        store.add(files + [root.appendingPathComponent("missing.txt")])
+        await settle(store)
+        let ids = store.items.map(\.id)
+        #expect(store.selectionSummary == nil)
+        store.select(ids[0], extending: false)
+        store.select(ids[1], extending: true)
+        let size = ByteCountFormatter.string(fromByteCount: 300, countStyle: .file)
+        #expect(store.selectionSummary == L10n.format("已选择 %d 个文件 · %@", 2, size))
+        store.select(ids[3], extending: true)
+        #expect(store.selectionSummary == L10n.format("已选择 %d 个文件 · %@", 3, L10n.text("大小未知")))
+        store.clearSelection()
+        #expect(store.selectionSummary == nil)
+    }
+
+    @Test func stackExportsAllAndSelectedCardsExportTheSelection() async throws {
         let root = try fixture()
         defer { try? FileManager.default.removeItem(at: root) }
         let files = (0..<8).map { root.appendingPathComponent("file-\($0).txt") }
@@ -25,13 +93,52 @@ struct FileLifecycleTests {
         let store = ShelfStore(managedFiles: ManagedFileStore(root: root.appendingPathComponent("managed")))
         store.add(files)
         await settle(store)
-        let first = try #require(store.items.first?.id)
-        let last = try #require(store.items.last?.id)
+        let ids = store.items.map(\.id)
+        let first = try #require(ids.first)
+        let last = try #require(ids.last)
         store.select(first, extending: false)
         #expect(store.dragItems(for: .all).count == 8)
-        store.selection = Set(store.items.map(\.id))
-        #expect(store.dragItems(for: .item(last)).map(\.id) == [last])
+        for mode in [ShelfPresentation.list, .grid] {
+            store.present(mode)
+            store.select(ids[1], extending: false)
+            store.select(ids[4], extending: false, range: true)
+            let row = FileDragView(store: store, scope: .item(ids[2]), content: Text("selected"))
+            let down = NSEvent.mouseEvent(with: .leftMouseDown, location: .zero, modifierFlags: [],
+                timestamp: 0, windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            row.mouseDown(with: down)
+            #expect(store.selection == Set(ids[1...4]))
+            #expect(store.dragItems(for: .item(ids[2])).map(\.id) == Array(ids[1...4]))
+            #expect(store.dragItems(for: .item(last)).map(\.id) == [last])
+            let unselectedRow = FileDragView(store: store, scope: .item(last), content: Text("unselected"))
+            unselectedRow.mouseDown(with: down)
+            #expect(store.selection == [last])
+            #expect(store.dragItems(for: .item(last)).map(\.id) == [last])
+            store.select(first, extending: false)
+            store.select(last, extending: true)
+            #expect(store.dragItems(for: .item(last)).map(\.id) == [first, last])
+            store.selection = Set(ids)
+            #expect(store.dragItems(for: .item(last)).map(\.id) == ids)
+            #expect(store.dragItems(for: .all).map(\.id) == ids)
+        }
         #expect(store.dragItems(for: .item(UUID())).isEmpty)
+    }
+
+    @Test func selectedDragDoesNotSilentlySkipUnavailableFiles() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let files = (0..<2).map { root.appendingPathComponent("ready-\($0).txt") }
+        for file in files { try Data("ready".utf8).write(to: file) }
+        let store = ShelfStore(managedFiles: ManagedFileStore(root: root.appendingPathComponent("managed")))
+        store.add(files + [root.appendingPathComponent("missing.txt")])
+        await settle(store)
+        let ids = store.items.map(\.id)
+        store.present(.list)
+        store.selection = [ids[0], ids[2]]
+        #expect(store.dragItems(for: .item(ids[0])).isEmpty)
+        #expect(store.dragItems(for: .item(ids[2])).isEmpty)
+        #expect(store.dragItems(for: .item(ids[1])).map(\.id) == [ids[1]])
+        store.select(ids[2], extending: true)
+        #expect(store.dragItems(for: .item(ids[0])).map(\.id) == [ids[0]])
     }
 
     @Test func incompleteStackDoesNotSilentlyExportOnlySomeFiles() async throws {

@@ -12,6 +12,7 @@ final class ShelfPanel: NSPanel {
     var onQuickLook: (() -> Bool)?
     var dismissQuickLook: (() -> Bool)?
     weak var quickLook: ShelfQuickLookController?
+    weak var selectionBackground: ShelfSelectionBackgroundView?
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     override func close() { onHide?() }
@@ -22,6 +23,11 @@ final class ShelfPanel: NSPanel {
     override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { quickLook?.hasItems == true }
     override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) { quickLook?.beginControl(panel) }
     override func endPreviewPanelControl(_ panel: QLPreviewPanel!) { quickLook?.endControl(panel) }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown { selectionBackground?.handleMouseDown(event) }
+        super.sendEvent(event)
+    }
 
     override func keyDown(with event: NSEvent) {
         if handleQuickLookKey(event) { return }

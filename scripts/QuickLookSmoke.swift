@@ -41,8 +41,7 @@ import Quartz
                 shelf.show(near: NSPoint(x: 450, y: 450), focus: true)
                 store.select(id, extending: false)
                 try await Task.sleep(for: .milliseconds(300))
-                // FileDragView has a generic SwiftUI content type. Locate the real
-                // row/card without duplicating that type in the test harness.
+                // Locate the real row/card through its native selection marker.
                 let row = fileResponder(in: shelf.destination)
                 check(row != nil && shelf.panel.makeFirstResponder(row), "\(mode): actual file row receives keys")
                 postKey(49, characters: " ", to: shelf.panel)
@@ -70,6 +69,7 @@ import Quartz
             try await Task.sleep(for: .milliseconds(300))
             check(preview?.isVisible == false && store.items.isEmpty, "closing shelf dismisses preview and clears references")
             check(FileManager.default.fileExists(atPath: file.path), "original file survives closing shelf")
+            try await checkSelection(shelf: shelf, store: store, root: root, check: check)
         } catch { check(false, error.localizedDescription) }
         shelf.stop()
         try? FileManager.default.removeItem(at: root)
@@ -78,11 +78,72 @@ import Quartz
     }
 
     private func fileResponder(in view: NSView) -> NSView? {
-        if String(describing: type(of: view)).hasPrefix("FileDragView<") { return view }
+        if view is ShelfFileSelectionTarget { return view }
         for child in view.subviews {
             if let row = fileResponder(in: child) { return row }
         }
         return nil
+    }
+
+    private func checkSelection(shelf: ShelfWindowController, store: ShelfStore, root: URL,
+                                check: (Bool, String) -> Void) async throws {
+        let files = (0..<4).map { root.appendingPathComponent("selection-\($0).txt") }
+        for (index, file) in files.enumerated() { try Data(repeating: 65, count: (index + 1) * 100).write(to: file) }
+        store.add(files)
+        for _ in 0..<200 where store.readyItems.count < 4 { try await Task.sleep(for: .milliseconds(10)) }
+        guard store.readyItems.count == 4 else { throw CocoaError(.fileReadUnknown) }
+        let ids = store.items.map(\.id)
+        func fileViews(_ view: NSView) -> [NSView] {
+            if view is ShelfFileSelectionTarget { return [view] }
+            return view.subviews.flatMap(fileViews)
+        }
+        for mode in [ShelfPresentation.list, .grid] {
+            store.present(mode)
+            shelf.show(near: NSPoint(x: 450, y: 450), focus: true)
+            try await Task.sleep(for: .milliseconds(500))
+            let rows = fileViews(shelf.destination).sorted {
+                let a = $0.convert($0.bounds, to: nil), b = $1.convert($1.bounds, to: nil)
+                return abs(a.midY - b.midY) > 1 ? a.midY > b.midY : a.midX < b.midX
+            }
+            guard rows.count == 4, let background = shelf.panel.selectionBackground else {
+                check(false, "\(mode): file rows and blank area are installed")
+                continue
+            }
+            func center(_ row: NSView) -> NSPoint { row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil) }
+            postClick(center(rows[0]), to: shelf.panel)
+            try await Task.sleep(for: .milliseconds(150))
+            check(store.selection == [ids[0]], "\(mode): clicking file selects it without background clearing")
+            postClick(center(rows[3]), modifiers: .shift, to: shelf.panel)
+            try await Task.sleep(for: .milliseconds(150))
+            check(store.selection == Set(ids), "\(mode): Shift click selects the full range")
+            postClick(center(rows[1]), modifiers: .shift, to: shelf.panel)
+            try await Task.sleep(for: .milliseconds(150))
+            check(store.selection == Set(ids.prefix(2)), "\(mode): Shift click shrinks the range")
+            let size = ByteCountFormatter.string(fromByteCount: 300, countStyle: .file)
+            check(store.selectionSummary == L10n.format("已选择 %d 个文件 · %@", 2, size), "\(mode): summary shows selected count and size")
+            postKey(49, characters: " ", to: shelf.panel)
+            try await Task.sleep(for: .milliseconds(400))
+            let preview = QLPreviewPanel.shared()
+            check(preview?.isVisible == true, "\(mode): selected range supports Quick Look")
+            let blank = background.convert(NSPoint(x: background.bounds.midX, y: 2), to: nil)
+            postClick(blank, to: shelf.panel)
+            try await Task.sleep(for: .milliseconds(200))
+            for _ in 0..<100 where preview?.isVisible == true { try await Task.sleep(for: .milliseconds(10)) }
+            check(store.selection.isEmpty && store.selectionSummary == nil, "\(mode): clicking blank clears selection and its summary")
+            check(preview?.isVisible == false, "\(mode): clearing selection closes Quick Look")
+            postClick(center(rows[2]), modifiers: .shift, to: shelf.panel)
+            try await Task.sleep(for: .milliseconds(150))
+            check(store.selection == [ids[2]], "\(mode): blank click resets Shift anchor")
+        }
+    }
+
+    private func postClick(_ point: NSPoint, modifiers: NSEvent.ModifierFlags = [], to window: NSWindow) {
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: modifiers,
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)!
+            NSApp.postEvent(event, atStart: false)
+        }
     }
 
     private func postKey(_ code: UInt16, characters: String, to window: NSWindow) {
