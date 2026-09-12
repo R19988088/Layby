@@ -7,6 +7,11 @@ enum ShelfLayout {
     static let expandedSize = CGSize(width: 500, height: 360)
     static let cornerRadius: CGFloat = 26
     static let headerButtonSize: CGFloat = 30
+    static let gridMinimumItemWidth: CGFloat = 128
+    static let gridColumnSpacing: CGFloat = 10
+    static func gridColumns(for width: CGFloat) -> Int {
+        max(1, Int((width + gridColumnSpacing) / (gridMinimumItemWidth + gridColumnSpacing)))
+    }
     // Match the button centers to the corner centers, with equal top and side insets.
     static var headerButtonInset: CGFloat { max(0, cornerRadius - headerButtonSize / 2) }
     static let shadowInset: CGFloat = 20

@@ -10,6 +10,7 @@ final class ShelfPanel: NSPanel {
     var onSelectAll: (() -> Void)?
     var onCopy: (() -> Void)?
     var onQuickLook: (() -> Bool)?
+    var onNavigate: ((ShelfNavigationDirection) -> Bool)?
     var dismissQuickLook: (() -> Bool)?
     weak var quickLook: ShelfQuickLookController?
     weak var selectionBackground: ShelfSelectionBackgroundView?
@@ -30,7 +31,7 @@ final class ShelfPanel: NSPanel {
     }
 
     override func keyDown(with event: NSEvent) {
-        if handleQuickLookKey(event) { return }
+        if handleQuickLookKey(event) || handleNavigationKey(event) { return }
         super.keyDown(with: event)
     }
 
@@ -39,8 +40,26 @@ final class ShelfPanel: NSPanel {
         // Holding Space must not repeatedly open and close the panel.
         return event.isARepeat || onQuickLook?() == true
     }
+
+    static func navigationDirection(for event: NSEvent) -> ShelfNavigationDirection? {
+        guard event.type == .keyDown,
+              event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty else { return nil }
+        switch event.keyCode {
+        case 123: return .left
+        case 124: return .right
+        case 125: return .down
+        case 126: return .up
+        default: return nil
+        }
+    }
+
+    func handleNavigationKey(_ event: NSEvent) -> Bool {
+        guard let direction = Self.navigationDirection(for: event) else { return false }
+        return onNavigate?(direction) ?? false
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if handleQuickLookKey(event) { return true }
+        if handleQuickLookKey(event) || handleNavigationKey(event) { return true }
         if event.modifierFlags.contains(.command) {
             switch event.charactersIgnoringModifiers?.lowercased() {
             case "a": onSelectAll?(); return true
@@ -181,6 +200,7 @@ final class ShelfWindowController {
         panel.onDelete = { [weak store] in store?.removeSelection() }
         panel.onCopy = { [weak store] in store?.copySelection() }
         panel.onQuickLook = { [weak self] in self?.quickLook.toggle() ?? false }
+        panel.onNavigate = { [weak store] direction in store?.moveSelection(direction) ?? false }
         panel.dismissQuickLook = { [weak self] in self?.quickLook.dismiss() ?? false }
         installShelfContent()
         updateAccessibility()

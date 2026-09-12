@@ -51,7 +51,8 @@ final class FileDragView<Content: View>: NSView, NSDraggingSource, ShelfFileSele
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func keyDown(with event: NSEvent) {
-        if let panel = window as? ShelfPanel, panel.handleQuickLookKey(event) { return }
+        if let panel = window as? ShelfPanel,
+           panel.handleQuickLookKey(event) || panel.handleNavigationKey(event) { return }
         super.keyDown(with: event)
     }
 

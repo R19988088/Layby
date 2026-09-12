@@ -19,6 +19,10 @@ enum ShelfDragScope {
     case item(UUID)
 }
 
+enum ShelfNavigationDirection {
+    case left, right, up, down
+}
+
 struct ShelfItem: Identifiable {
     let id: UUID
     var url: URL?
@@ -49,6 +53,7 @@ final class ShelfStore {
     var notice: String?
     private(set) var presentation: ShelfPresentation = .stack { didSet { onPreviewChange?() } }
     let folderBrowser = ShelfFolderBrowser()
+    var gridColumnCount = 1
     @ObservationIgnored var onPreviewChange: (() -> Void)?
     @ObservationIgnored private var selectionAnchor: UUID?
     @ObservationIgnored let managedFiles: ManagedFileStore
@@ -88,6 +93,33 @@ final class ShelfStore {
     }
 
     func clearSelection() { selection.removeAll() }
+
+    /// Return true at boundaries as well, so a handled arrow never becomes an
+    /// invalid-input beep. Multi-selection and the stack keep their own behavior.
+    @discardableResult func moveSelection(_ direction: ShelfNavigationDirection, skippingUnavailable: Bool = false) -> Bool {
+        let entries = visibleItems
+        guard presentation.isExpanded, selection.count == 1, let id = selection.first,
+              var index = entries.firstIndex(where: { $0.id == id }) else { return false }
+        let columns = presentation == .grid ? max(1, gridColumnCount) : 1
+        func nextIndex(after current: Int) -> Int? {
+            switch direction {
+            case .left: return current > 0 ? current - 1 : nil
+            case .right: return current + 1 < entries.count ? current + 1 : nil
+            case .up: return current >= columns ? current - columns : nil
+            case .down:
+                guard current / columns < (entries.count - 1) / columns else { return nil }
+                return min(current + columns, entries.count - 1)
+            }
+        }
+        while let next = nextIndex(after: index) {
+            if !skippingUnavailable || entries[next].state.isReady {
+                select(entries[next].id, extending: false)
+                return true
+            }
+            index = next
+        }
+        return true
+    }
 
     func present(_ presentation: ShelfPresentation) {
         if presentation == .stack { resetFolderBrowsing() }

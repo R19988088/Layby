@@ -183,24 +183,38 @@ struct ShelfView: View {
     }
 
     private var browser: some View {
-        ScrollView {
-            if store.presentation == .grid {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 128), spacing: 10)], spacing: 12) {
-                    ForEach(store.visibleItems) { item in
-                        fileCell(item, grid: true)
+        ScrollViewReader { proxy in
+            ScrollView {
+                if store.presentation == .grid {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: ShelfLayout.gridMinimumItemWidth),
+                                                spacing: ShelfLayout.gridColumnSpacing)], spacing: 12) {
+                        ForEach(store.visibleItems) { item in
+                            fileCell(item, grid: true)
+                        }
                     }
-                }
-                .padding(.top, 8).padding(.bottom, 12)
-            } else {
-                LazyVStack(spacing: 6) {
-                    ForEach(store.visibleItems) { item in
-                        fileCell(item, grid: false)
+                    .onGeometryChange(for: Int.self) { geometry in
+                        ShelfLayout.gridColumns(for: geometry.size.width)
+                    } action: { columns in
+                        store.gridColumnCount = columns
                     }
+                    .padding(.top, 8).padding(.bottom, 12)
+                } else {
+                    LazyVStack(spacing: 6) {
+                        ForEach(store.visibleItems) { item in
+                            fileCell(item, grid: false)
+                        }
+                    }
+                    .padding(.vertical, 4)
                 }
-                .padding(.vertical, 4)
+            }
+            .scrollIndicators(.automatic)
+            .onChange(of: store.selection, initial: true) { _, selection in
+                guard selection.count == 1, let id = selection.first else { return }
+                // No animation: held arrow keys should keep the focused row visible
+                // immediately, even when Quick Look is the key window.
+                proxy.scrollTo(id)
             }
         }
-        .scrollIndicators(.automatic)
         .id(store.folderBrowser.directory?.id)
     }
 
@@ -215,6 +229,7 @@ struct ShelfView: View {
                         in: RoundedRectangle(cornerRadius: 16))
         }
         .frame(height: grid ? 146 : 54)
+        .id(item.id)
         .accessibilityLabel(L10n.format("%@，%@，拖动以取出此文件", item.displayName, item.displaySubtitle))
         .help(item.displayName)
         .contextMenu {

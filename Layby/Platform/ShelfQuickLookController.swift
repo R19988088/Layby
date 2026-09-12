@@ -143,6 +143,11 @@ final class ShelfQuickLookController: NSObject, @MainActor QLPreviewPanelDataSou
                     if !event.isARepeat { self.dismiss() }
                     return true
                 }
+                // Quick Look's movie/PDF responders otherwise use arrows for
+                // playback or page navigation. Single selection navigates files.
+                if let direction = ShelfPanel.navigationDirection(for: event) {
+                    return self.store.moveSelection(direction, skippingUnavailable: true)
+                }
                 return false
             }
             return handled ? nil : event

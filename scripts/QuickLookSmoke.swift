@@ -71,6 +71,7 @@ import Quartz
             check(FileManager.default.fileExists(atPath: file.path), "original file survives closing shelf")
             try await checkSelection(shelf: shelf, store: store, root: root, check: check)
             try await checkFolders(shelf: shelf, store: store, root: root, check: check)
+            try await checkKeyboard(shelf: shelf, store: store, root: root, check: check)
         } catch { check(false, error.localizedDescription) }
         shelf.stop()
         try? FileManager.default.removeItem(at: root)
@@ -171,6 +172,9 @@ import Quartz
                 postKey(49, characters: " ", to: shelf.panel)
                 try await Task.sleep(for: .milliseconds(500))
                 let preview = QLPreviewPanel.shared()
+                for _ in 0..<150 where preview?.currentPreviewItem?.previewItemURL?.resolvingSymlinksInPath() != child.resolvingSymlinksInPath() {
+                    try await Task.sleep(for: .milliseconds(10))
+                }
                 check(preview?.currentPreviewItem?.previewItemURL?.resolvingSymlinksInPath() == child.resolvingSymlinksInPath(), "\(mode): Quick Look previews the child")
                 if let preview { postKey(53, characters: "\u{1b}", to: preview) }
                 try await Task.sleep(for: .milliseconds(400))
@@ -187,6 +191,55 @@ import Quartz
         }
     }
 
+    private func checkKeyboard(shelf: ShelfWindowController, store: ShelfStore, root: URL,
+                               check: (Bool, String) -> Void) async throws {
+        shelf.hide()
+        let files = (0..<12).map { root.appendingPathComponent("keyboard-\($0).txt") }
+        for file in files { try Data("keyboard navigation".utf8).write(to: file) }
+        store.add(files)
+        for _ in 0..<200 where store.readyItems.count < files.count { try await Task.sleep(for: .milliseconds(10)) }
+        let ids = store.items.map(\.id)
+        guard ids.count == files.count else { throw CocoaError(.fileReadUnknown) }
+        func scrollView(in view: NSView) -> NSScrollView? {
+            if let scroll = view as? NSScrollView { return scroll }
+            for child in view.subviews { if let scroll = scrollView(in: child) { return scroll } }
+            return nil
+        }
+        for mode in [ShelfPresentation.list, .grid] {
+            store.present(mode)
+            shelf.show(near: NSPoint(x: 450, y: 450), focus: true)
+            store.select(ids[0], extending: false)
+            try await Task.sleep(for: .milliseconds(400))
+            shelf.panel.makeFirstResponder(fileResponder(in: shelf.destination))
+            let columns = mode == .grid ? store.gridColumnCount : 1
+            postKey(125, characters: "\u{f701}", to: shelf.panel)
+            try await Task.sleep(for: .milliseconds(200))
+            check(store.selection == [ids[columns]], "\(mode): Down follows visible row spacing")
+            postKey(124, characters: "\u{f703}", to: shelf.panel)
+            try await Task.sleep(for: .milliseconds(200))
+            check(store.selection == [ids[columns + 1]], "\(mode): Right selects the next file")
+            postKey(49, characters: " ", to: shelf.panel)
+            try await Task.sleep(for: .milliseconds(500))
+            guard let preview = QLPreviewPanel.shared() else { throw CocoaError(.fileReadUnknown) }
+            postKey(124, characters: "\u{f703}", to: preview)
+            try await Task.sleep(for: .milliseconds(400))
+            check(preview.isVisible && preview.currentPreviewItem?.previewItemURL == files[columns + 2],
+                  "\(mode): Right switches the open native preview")
+            postKey(126, characters: "\u{f700}", to: preview)
+            try await Task.sleep(for: .milliseconds(200))
+            check(store.selection == [ids[2]] && preview.currentPreviewItem?.previewItemURL == files[2],
+                  "\(mode): Up synchronizes preview and shelf selection")
+            for _ in 0..<files.count { postKey(124, characters: "\u{f703}", to: preview, repeating: true) }
+            try await Task.sleep(for: .milliseconds(600))
+            check(store.selection == [ids.last!] && preview.currentPreviewItem?.previewItemURL == files.last,
+                  "\(mode): held arrow reaches the last file and stops there")
+            check((scrollView(in: shelf.destination)?.contentView.bounds.origin.y ?? 0) > 0,
+                  "\(mode): keyboard navigation scrolls to offscreen files")
+            postKey(53, characters: "\u{1b}", to: preview)
+            try await Task.sleep(for: .milliseconds(400))
+        }
+    }
+
     private func postClick(_ point: NSPoint, modifiers: NSEvent.ModifierFlags = [], clickCount: Int = 1, to window: NSWindow) {
         for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
             let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: modifiers,
@@ -196,11 +249,11 @@ import Quartz
         }
     }
 
-    private func postKey(_ code: UInt16, characters: String, to window: NSWindow) {
+    private func postKey(_ code: UInt16, characters: String, to window: NSWindow, repeating: Bool = false) {
         let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
             timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
             context: nil, characters: characters, charactersIgnoringModifiers: characters,
-            isARepeat: false, keyCode: code)!
+            isARepeat: repeating, keyCode: code)!
         NSApp.postEvent(event, atStart: false)
     }
 }
