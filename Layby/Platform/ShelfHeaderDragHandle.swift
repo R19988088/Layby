@@ -3,9 +3,12 @@ import QuartzCore
 import SwiftUI
 
 enum ShelfLayout {
-    static let size = CGSize(width: 260, height: 280)
+    static let size = CGSize(width: 220, height: 220)
     static let expandedSize = CGSize(width: 500, height: 360)
     static let cornerRadius: CGFloat = 26
+    static let headerButtonSize: CGFloat = 30
+    // Match the button centers to the corner centers, with equal top and side insets.
+    static var headerButtonInset: CGFloat { max(0, cornerRadius - headerButtonSize / 2) }
     static let shadowInset: CGFloat = 20
     static let windowSize = CGSize(width: size.width + shadowInset * 2, height: size.height + shadowInset * 2)
     static func windowSize(for presentation: ShelfPresentation) -> CGSize {

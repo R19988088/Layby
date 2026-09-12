@@ -34,24 +34,18 @@ struct ShelfView: View {
                 else { browser }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 12)
             if let notice = store.notice {
                 Text(notice).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
-                    .padding(.top, 6).accessibilityLabel(notice)
+                    .padding(.horizontal, 12).padding(.top, 6).accessibilityLabel(notice)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 2)
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background {
-            RoundedRectangle(cornerRadius: ShelfLayout.cornerRadius)
-                .fill(accent.opacity(store.isDropTargeted ? 0.1 : 0))
-        }
         .overlay {
-            RoundedRectangle(cornerRadius: ShelfLayout.cornerRadius)
-                .strokeBorder(store.isDropTargeted ? accent.opacity(0.8) : .white.opacity(0.22),
-                              lineWidth: store.isDropTargeted ? 2 : 0.75)
+            ShelfDropBorder(isTargeted: store.isDropTargeted)
                 .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
         .tint(accent)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: store.presentation)
@@ -59,13 +53,18 @@ struct ShelfView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 0) {
-            ShelfHeaderDragHandle(onBeginDragging: beginMoving)
-                .frame(height: 16)
-                .padding(.horizontal, 14)
-            headerControls
-        }
-        .padding(.bottom, 8)
+        headerControls
+            .frame(height: ShelfLayout.headerButtonSize)
+            .padding(.horizontal, ShelfLayout.headerButtonInset)
+            .padding(.top, ShelfLayout.headerButtonInset)
+            .overlay(alignment: .top) {
+                // Keep the grip near the edge without pushing down either button row.
+                // Its centered hit area stays clear of the corner buttons in both modes.
+                ShelfHeaderDragHandle(onBeginDragging: beginMoving)
+                    .frame(width: 100, height: 16)
+                    .padding(.top, 2)
+            }
+            .padding(.bottom, 8)
     }
 
     private var headerControls: some View {
@@ -98,7 +97,7 @@ struct ShelfView: View {
     private func roundButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 13, weight: .semibold))
-                .frame(width: 30, height: 30)
+                .frame(width: ShelfLayout.headerButtonSize, height: ShelfLayout.headerButtonSize)
         }
         .buttonStyle(ShelfSolidButtonStyle()).help(label).accessibilityLabel(label)
     }
@@ -178,7 +177,7 @@ struct ShelfView: View {
                 else { FileRowContent(item: item) }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(store.selection.contains(item.id) ? accent.opacity(0.14) : .clear,
+            .background(store.selection.contains(item.id) ? Color(nsColor: .unemphasizedSelectedContentBackgroundColor) : .clear,
                         in: RoundedRectangle(cornerRadius: 16))
         }
         .frame(height: grid ? 146 : 54)
@@ -195,6 +194,40 @@ struct ShelfView: View {
         }
         .onAppear { store.requestThumbnail(item.id) }
         .onChange(of: item.state) { _, _ in store.requestThumbnail(item.id) }
+    }
+}
+
+/// Only the blue outline animates; the glass and file contents retain their appearance.
+private struct ShelfDropBorder: View {
+    let isTargeted: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var blueOutline: some View {
+        RoundedRectangle(cornerRadius: ShelfLayout.cornerRadius)
+            .strokeBorder(Color(nsColor: .systemBlue), lineWidth: 5)
+    }
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: ShelfLayout.cornerRadius)
+                .strokeBorder(.white.opacity(0.22), lineWidth: 0.75)
+            if isTargeted {
+                Group {
+                    if reduceMotion {
+                        blueOutline.opacity(0.9)
+                    } else {
+                        blueOutline.phaseAnimator([0.5, 1.0]) { outline, opacity in
+                            outline.opacity(opacity)
+                        } animation: { _ in
+                            .easeInOut(duration: 0.9)
+                        }
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
+        // Removing the targeted outline also tears down its repeating phase animation.
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: isTargeted)
     }
 }
 
