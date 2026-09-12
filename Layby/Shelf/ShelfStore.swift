@@ -31,6 +31,8 @@ struct ShelfItem: Identifiable {
     var isDirectory = false
     var isManaged = false
     var lease: FileAccessLease?
+    @MainActor var displayName: String { url == nil ? L10n.text(name) : name }
+    @MainActor var displaySubtitle: String { L10n.text(subtitle) }
 }
 
 @Observable @MainActor
@@ -154,7 +156,7 @@ final class ShelfStore {
         guard !urls.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.writeObjects(urls as [NSURL])
-        notice = "已复制 \(urls.count) 个文件"
+        notice = L10n.format("已复制 %d 个文件", urls.count)
     }
 
     private func inspect(id: UUID, lease: FileAccessLease, generation expected: UUID) {

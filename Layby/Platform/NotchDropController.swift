@@ -14,7 +14,7 @@ final class NotchDropController {
 
     func setActive(_ active: Bool) {
         hide()
-        guard active, settings.notchEnabled || settings.topEdgeEnabled else { return }
+        guard active, settings.notchEnabled else { return }
         for screen in NSScreen.screens {
             let notch = ShelfGeometry.notch(frame: screen.frame, topInset: screen.safeAreaInsets.top,
                                             left: screen.auxiliaryTopLeftArea, right: screen.auxiliaryTopRightArea)
@@ -63,7 +63,7 @@ private struct NotchHint: View {
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: "tray.and.arrow.down")
-            Text("暂放到 Layby")
+            Text(L10n.text("暂放到 Layby"))
         }
         .font(.system(size: 10, weight: .medium))
         .padding(.horizontal, 12).padding(.vertical, 5)

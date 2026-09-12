@@ -21,6 +21,7 @@ final class AppCoordinator: NSObject {
     @ObservationIgnored private var automaticPresentation = false
 
     func start() {
+        L10n.configure(settings.language)
         installMenus()
         settings.onChange = { [weak self] in self?.applySettings() }
         hotKey.onPress = { [weak self] in self?.showShelf() }
@@ -48,6 +49,8 @@ final class AppCoordinator: NSObject {
         applySettings()
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
             object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.resetInteraction() } })
+        observers.append(NotificationCenter.default.addObserver(forName: NSLocale.currentLocaleDidChangeNotification,
+            object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.applySettings() } })
         for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification, NSWorkspace.didWakeNotification] {
             workspaceObservers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.resetInteraction() }
@@ -104,15 +107,19 @@ final class AppCoordinator: NSObject {
     }
 
     private func applySettings() {
+        if L10n.configure(settings.language) { store.notice = nil }
+        installMenus()
+        settingsWindow?.title = L10n.text("Layby 设置")
+        shelf.panel.title = L10n.text("Layby 文件停放区")
         let status = hotKey.register(settings.hotKeyEnabled ? settings.shortcut : nil)
-        hotKeyMessage = status == 0 ? nil : "快捷键无法注册（\(status)），请更换组合键。"
+        hotKeyMessage = status == 0 ? nil : L10n.format("快捷键无法注册（%d），请更换组合键。", status)
         if observation.isTracking { notch.setActive(true) }
     }
 
     func changeShortcut(_ shortcut: HotKeyShortcut) {
         if !settings.hotKeyEnabled { settings.shortcut = shortcut; return }
         let status = hotKey.register(shortcut)
-        guard status == 0 else { hotKeyMessage = "该组合键不可用（\(status)），已保留原快捷键。"; return }
+        guard status == 0 else { hotKeyMessage = L10n.format("该组合键不可用（%d），已保留原快捷键。", status); return }
         settings.shortcut = shortcut
         hotKeyMessage = nil
     }
@@ -128,10 +135,13 @@ final class AppCoordinator: NSObject {
     }
 
     @objc func showSettings() {
+        // A normal settings window can become key while the app remains absent from the Dock.
+        if NSApp.activationPolicy() != .accessory { NSApp.setActivationPolicy(.accessory) }
         if settingsWindow == nil {
-            let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 480, height: 720),
-                                  styleMask: [.titled, .closable], backing: .buffered, defer: false)
-            window.title = "Layby 设置"
+            let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 760, height: 600),
+                                  styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+            window.title = L10n.text("Layby 设置")
+            window.contentMinSize = CGSize(width: 700, height: 520)
             window.titlebarAppearsTransparent = true
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: SettingsView(settings: settings, coordinator: self))
@@ -155,26 +165,26 @@ final class AppCoordinator: NSObject {
 
     private func installMenus() {
         let menu = NSMenu()
-        menu.addItem(withTitle: "显示停放区", action: #selector(showShelf), keyEquivalent: "")
+        menu.addItem(withTitle: L10n.text("显示停放区"), action: #selector(showShelf), keyEquivalent: "")
         menu.addItem(.separator())
-        menu.addItem(withTitle: "设置…", action: #selector(showSettings), keyEquivalent: ",")
+        menu.addItem(withTitle: L10n.text("设置…"), action: #selector(showSettings), keyEquivalent: ",")
         menu.addItem(.separator())
-        let quit = menu.addItem(withTitle: "退出 Layby", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quit = menu.addItem(withTitle: L10n.text("退出 Layby"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         for item in menu.items where item.action != nil { item.target = item == quit ? NSApp : self }
-        let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "tray.2", accessibilityDescription: "Layby 文件停放区")
-        statusItem.button?.toolTip = "Layby — 临时文件停放区"
+        let statusItem = self.statusItem ?? NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem.button?.image = NSImage(systemSymbolName: "tray.2", accessibilityDescription: L10n.text("Layby 文件停放区"))
+        statusItem.button?.toolTip = L10n.text("Layby — 临时文件停放区")
         statusItem.menu = menu
         self.statusItem = statusItem
         let main = NSMenu()
         let applicationItem = main.addItem(withTitle: "Layby", action: nil, keyEquivalent: "")
         applicationItem.submenu = menu.copy() as? NSMenu
-        let editItem = main.addItem(withTitle: "编辑", action: nil, keyEquivalent: "")
-        let edit = NSMenu(title: "编辑")
-        edit.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        edit.addItem(withTitle: "复制", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        let editItem = main.addItem(withTitle: L10n.text("编辑"), action: nil, keyEquivalent: "")
+        let edit = NSMenu(title: L10n.text("编辑"))
+        edit.addItem(withTitle: L10n.text("剪切"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: L10n.text("复制"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: L10n.text("粘贴"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: L10n.text("全选"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit
         NSApp.mainMenu = main
     }

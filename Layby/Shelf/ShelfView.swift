@@ -12,17 +12,17 @@ struct ShelfView: View {
     private var accent: Color {
         colorScheme == .dark ? Color(red: 0.48, green: 0.9, blue: 0.8) : Color(red: 0.08, green: 0.43, blue: 0.4)
     }
-    private var countLabel: String { "\(store.items.count) 个文件" }
+    private var countLabel: String { L10n.fileCount(store.items.count) }
     private var summary: String {
         let pending = store.items.filter { $0.state == .loading }.count
-        if pending > 0 { return "正在接收 \(pending) 个文件…" }
+        if pending > 0 { return L10n.format("正在接收 %d 个文件…", pending) }
         let unavailable = store.items.filter { !$0.state.isReady }.count
-        if unavailable > 0 { return "\(unavailable) 个文件不可用" }
+        if unavailable > 0 { return L10n.format("%d 个文件不可用", unavailable) }
         let sizes = store.items.compactMap(\.byteCount)
         if sizes.count == store.items.count, !sizes.isEmpty {
             return ByteCountFormatter.string(fromByteCount: sizes.reduce(0, +), countStyle: .file)
         }
-        return "拖动单个文件以取出"
+        return L10n.text("拖动单个文件以取出")
     }
 
     var body: some View {
@@ -36,8 +36,8 @@ struct ShelfView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, 12)
             if let notice = store.notice {
-                Text(notice).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
-                    .padding(.horizontal, 12).padding(.top, 6).accessibilityLabel(notice)
+                Text(L10n.text(notice)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
+                    .padding(.horizontal, 12).padding(.top, 6).accessibilityLabel(L10n.text(notice))
             }
         }
         .padding(.bottom, 12)
@@ -99,7 +99,7 @@ struct ShelfView: View {
             Image(systemName: symbol).font(.system(size: 13, weight: .semibold))
                 .frame(width: ShelfLayout.headerButtonSize, height: ShelfLayout.headerButtonSize)
         }
-        .buttonStyle(ShelfSolidButtonStyle()).help(label).accessibilityLabel(label)
+        .buttonStyle(ShelfSolidButtonStyle()).help(L10n.text(label)).accessibilityLabel(L10n.text(label))
     }
 
     private func layoutButton(_ symbol: String, label: String, mode: ShelfPresentation) -> some View {
@@ -107,12 +107,12 @@ struct ShelfView: View {
             Image(systemName: symbol).font(.system(size: 12, weight: .medium))
                 .frame(width: 26, height: 26)
         }
-        .buttonStyle(ShelfSolidButtonStyle(selected: store.presentation == mode)).help(label).accessibilityLabel(label)
+        .buttonStyle(ShelfSolidButtonStyle(selected: store.presentation == mode)).help(L10n.text(label)).accessibilityLabel(L10n.text(label))
         .accessibilityAddTraits(store.presentation == mode ? .isSelected : [])
     }
 
     private var emptyState: some View {
-        Text(store.isDropTargeted ? "松手，放在这里" : "拖入文件或文件夹")
+        Text(L10n.text(store.isDropTargeted ? "松手，放在这里" : "拖入文件或文件夹"))
             .font(.system(size: 13)).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -124,8 +124,8 @@ struct ShelfView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .help(store.dragItems(for: .all).isEmpty ? "接收完成后可整体拖出；可展开列表处理不可用文件" : "拖动堆叠，取出全部文件")
-            .accessibilityLabel("文件堆叠，\(countLabel)，拖动以取出全部文件")
+            .help(L10n.text(store.dragItems(for: .all).isEmpty ? "接收完成后可整体拖出；可展开列表处理不可用文件" : "拖动堆叠，取出全部文件"))
+            .accessibilityLabel(L10n.format("文件堆叠，%@，拖动以取出全部文件", countLabel))
             .onAppear { requestStackThumbnails() }
             .onChange(of: store.readyItems.map(\.id)) { _, _ in requestStackThumbnails() }
             .onChange(of: store.items.map(\.id)) { _, _ in requestStackThumbnails() }
@@ -139,8 +139,8 @@ struct ShelfView: View {
                 }
                 .padding(.horizontal, 13).frame(height: 32)
             }
-            .buttonStyle(ShelfSolidButtonStyle()).help("展开，查看和拖出单个文件")
-            .accessibilityLabel("查看全部 \(countLabel)")
+            .buttonStyle(ShelfSolidButtonStyle()).help(L10n.text("展开，查看和拖出单个文件"))
+            .accessibilityLabel(L10n.format("查看全部 %@", countLabel))
             .padding(.bottom, 4)
         }
     }
@@ -181,16 +181,16 @@ struct ShelfView: View {
                         in: RoundedRectangle(cornerRadius: 16))
         }
         .frame(height: grid ? 146 : 54)
-        .accessibilityLabel("\(item.name)，\(item.subtitle)，拖动以取出此文件")
-        .help(item.name)
+        .accessibilityLabel(L10n.format("%@，%@，拖动以取出此文件", item.displayName, item.displaySubtitle))
+        .help(item.displayName)
         .contextMenu {
             if let url = item.url {
-                Button("在 Finder 中显示") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-                Button("重新检查") { store.retry(item.id) }
+                Button(L10n.text("在 Finder 中显示")) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                Button(L10n.text("重新检查")) { store.retry(item.id) }
             }
-            Button("从停放区移除") { store.remove([item.id]) }
+            Button(L10n.text("从停放区移除")) { store.remove([item.id]) }
             Divider()
-            Button("清空停放区") { store.clear() }
+            Button(L10n.text("清空停放区")) { store.clear() }
         }
         .onAppear { store.requestThumbnail(item.id) }
         .onChange(of: item.state) { _, _ in store.requestThumbnail(item.id) }
@@ -307,9 +307,9 @@ private struct FileStatus: View {
     let item: ShelfItem
     var body: some View {
         if item.state == .loading {
-            ProgressView().controlSize(.small).accessibilityLabel("正在接收")
+            ProgressView().controlSize(.small).accessibilityLabel(L10n.text("正在接收"))
         } else if case .unavailable = item.state {
-            Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange).accessibilityLabel("文件不可用")
+            Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange).accessibilityLabel(L10n.text("文件不可用"))
         }
     }
 }
@@ -322,8 +322,8 @@ private struct FileTileContent: View {
                 .frame(width: 104, height: 88)
                 .shadow(color: .black.opacity(0.13), radius: 3, y: 2)
                 .overlay(alignment: .bottomTrailing) { FileStatus(item: item) }
-            Text(item.name).font(.system(size: 13, weight: .medium)).lineLimit(1).truncationMode(.middle)
-            Text(item.subtitle).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            Text(item.displayName).font(.system(size: 13, weight: .medium)).lineLimit(1).truncationMode(.middle)
+            Text(item.displaySubtitle).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
         }
         .padding(8)
     }
@@ -335,8 +335,8 @@ private struct FileRowContent: View {
         HStack(spacing: 12) {
             Image(nsImage: item.icon).resizable().scaledToFit().frame(width: 34, height: 38)
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.name).font(.system(size: 13, weight: .medium)).lineLimit(1).truncationMode(.middle)
-                Text(item.subtitle).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                Text(item.displayName).font(.system(size: 13, weight: .medium)).lineLimit(1).truncationMode(.middle)
+                Text(item.displaySubtitle).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 0)
             FileStatus(item: item)

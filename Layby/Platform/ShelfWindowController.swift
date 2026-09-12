@@ -113,7 +113,7 @@ final class ShelfWindowController {
         self.store = store
         panel = ShelfPanel(contentRect: CGRect(origin: .zero, size: ShelfLayout.windowSize),
                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.title = "Layby 文件停放区"
+        panel.title = L10n.text("Layby 文件停放区")
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false

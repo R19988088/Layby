@@ -18,9 +18,9 @@ struct HotKeyShortcut: Codable, Equatable {
     var modifiers: UInt32
     var keyLabel: String
     static let standard = Self(keyCode: 49, modifiers: UInt32(controlKey | optionKey), keyLabel: "空格")
-    var label: String {
+    @MainActor var label: String {
         [(controlKey, "⌃"), (optionKey, "⌥"), (shiftKey, "⇧"), (cmdKey, "⌘")]
-            .filter { modifiers & UInt32($0.0) != 0 }.map(\.1).joined() + keyLabel
+            .filter { modifiers & UInt32($0.0) != 0 }.map(\.1).joined() + (keyCode == 49 ? L10n.text("空格") : keyLabel)
     }
     static func carbonFlags(_ flags: NSEvent.ModifierFlags) -> UInt32 {
         var result: UInt32 = 0
@@ -34,6 +34,7 @@ struct HotKeyShortcut: Codable, Equatable {
 
 @Observable @MainActor
 final class AppSettings {
+    var language: AppLanguage { didSet { save() } }
     var shakeEnabled: Bool { didSet { save() } }
     var modifierEnabled: Bool { didSet { save() } }
     var notchEnabled: Bool { didSet { save() } }
@@ -48,6 +49,7 @@ final class AppSettings {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        language = AppLanguage(rawValue: defaults.string(forKey: "language") ?? "") ?? .system
         defaults.register(defaults: ["shakeEnabled": true, "modifierEnabled": true,
                                     "notchEnabled": true, "hotKeyEnabled": true])
         shakeEnabled = defaults.bool(forKey: "shakeEnabled")
@@ -67,6 +69,7 @@ final class AppSettings {
     }
 
     private func save() {
+        defaults.set(language.rawValue, forKey: "language")
         defaults.set(shakeEnabled, forKey: "shakeEnabled")
         defaults.set(modifierEnabled, forKey: "modifierEnabled")
         defaults.set(notchEnabled, forKey: "notchEnabled")

@@ -29,6 +29,7 @@ struct ShelfHeaderDragHandle: NSViewRepresentable {
 
     func updateNSView(_ view: HeaderDragView, context: Context) {
         view.onBeginDragging = onBeginDragging
+        view.updateAccessibilityLabels()
     }
 
     static func dismantleNSView(_ view: HeaderDragView, coordinator: ()) {
@@ -53,12 +54,15 @@ final class HeaderDragView: NSView {
         layer?.addSublayer(grip)
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
-        setAccessibilityLabel("移动停放区")
-        setAccessibilityHelp("按住顶部横条并拖动，可以移动窗口")
+        updateAccessibilityLabels()
         updateGrip(animated: false)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    func updateAccessibilityLabels() {
+        setAccessibilityLabel(L10n.text("移动停放区"))
+        setAccessibilityHelp(L10n.text("按住顶部横条并拖动，可以移动窗口"))
+    }
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 

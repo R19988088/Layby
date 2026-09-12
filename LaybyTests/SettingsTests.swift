@@ -1,0 +1,69 @@
+import Foundation
+import Testing
+@testable import LaybyKit
+
+@MainActor @Suite(.serialized)
+struct SettingsTests {
+    @Test func languageAndActivationChoicesSurviveReload() throws {
+        let suite = "Layby.SettingsTests.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = AppSettings(defaults: defaults)
+        #expect(settings.language == .system)
+        var changes = 0
+        settings.onChange = { changes += 1 }
+        settings.language = .english
+        settings.shakeEnabled = false
+        settings.modifierEnabled = false
+        settings.notchEnabled = false
+        settings.hotKeyEnabled = false
+        settings.topEdgeEnabled = true
+        let restored = AppSettings(defaults: defaults)
+        #expect(restored.language == .english)
+        #expect(!restored.shakeEnabled && !restored.modifierEnabled)
+        #expect(!restored.notchEnabled && !restored.hotKeyEnabled)
+        #expect(restored.topEdgeEnabled)
+        #expect(changes == 6)
+        restored.language = .chinese
+        #expect(AppSettings(defaults: defaults).language == .chinese)
+        restored.language = .system
+        #expect(AppSettings(defaults: defaults).language == .system)
+    }
+
+    @Test func invalidSavedLanguageFallsBackToSystem() throws {
+        let suite = "Layby.SettingsTests.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("unsupported", forKey: "language")
+        #expect(AppSettings(defaults: defaults).language == .system)
+    }
+
+    @Test func systemLanguageUsesSupportedPreferencesAndOverridesWin() {
+        #expect(AppLanguage.system.resolved(preferredLanguages: ["zh-Hant-TW", "en-US"]) == .chinese)
+        #expect(AppLanguage.system.resolved(preferredLanguages: ["en-GB", "zh-Hans"]) == .english)
+        #expect(AppLanguage.system.resolved(preferredLanguages: ["fr-FR", "zh_CN"]) == .chinese)
+        #expect(AppLanguage.system.resolved(preferredLanguages: ["fr-FR"]) == .english)
+        #expect(AppLanguage.system.resolved(preferredLanguages: []) == .english)
+        #expect(AppLanguage.english.resolved(preferredLanguages: ["zh-Hans"]) == .english)
+        #expect(AppLanguage.chinese.resolved(preferredLanguages: ["en-US"]) == .chinese)
+    }
+
+    @Test func translatedUIAndShortcutLabelsChangeImmediately() {
+        defer { L10n.configure(.system) }
+        L10n.configure(.english)
+        #expect(L10n.text("功能设置") == "Features")
+        #expect(L10n.text("设置…") == "Settings…")
+        #expect(L10n.text("拖入文件或文件夹") == "Drop files or folders here")
+        #expect(L10n.fileCount(1) == "1 file")
+        #expect(L10n.fileCount(4) == "4 files")
+        #expect(HotKeyShortcut.standard.label == "⌃⌥Space")
+        L10n.configure(.chinese)
+        #expect(L10n.text("功能设置") == "功能设置")
+        #expect(L10n.fileCount(4) == "4 个文件")
+        #expect(HotKeyShortcut.standard.label == "⌃⌥空格")
+        L10n.configure(.system, preferredLanguages: ["en-US"])
+        #expect(L10n.text("通用设置") == "General")
+        L10n.configure(.system, preferredLanguages: ["zh-Hans"])
+        #expect(L10n.text("通用设置") == "通用设置")
+    }
+}
