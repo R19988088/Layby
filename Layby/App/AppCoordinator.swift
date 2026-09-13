@@ -27,6 +27,9 @@ final class AppCoordinator: NSObject {
         hotKey.onPress = { [weak self] in self?.showShelf() }
         observation.onActivation = { [weak self] reason, point in self?.activate(reason, point: point) }
         observation.onActivityChange = { [weak self] active in self?.dragActivityChanged(active) }
+        notch.hasShelfOnScreen = { [weak self] screen in
+            self?.shelf.isVisible(on: screen.frame) ?? false
+        }
         notch.onActivate = { [weak self] screen in
             self?.activate(.notch, point: CGPoint(x: screen.frame.midX, y: screen.frame.maxY), screen: screen)
         }
@@ -89,6 +92,7 @@ final class AppCoordinator: NSObject {
         if !manual { dragActivated = true }
         automaticPresentation = !manual && store.items.isEmpty && !shelf.isCollapsed && !shelf.isDocked
         shelf.show(near: point, focus: manual, notchScreen: screen, expand: manual || reason == .hotKey)
+        notch.suppressOccupiedScreens()
         Logger.activation.debug("Shelf presented; manual=\(manual)")
     }
 

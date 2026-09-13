@@ -5,8 +5,10 @@ import SwiftUI
 final class NotchDropController {
     private let store: ShelfStore
     private let settings: AppSettings
-    private var panels: [NSPanel] = []
+    private(set) var panels: [(screen: NSScreen, panel: NSPanel)] = []
+    var hasShelfOnScreen: (NSScreen) -> Bool = { _ in false }
     private var dwell: Task<Void, Never>?
+    private var dwellScreen: NSScreen?
     var onActivate: ((NSScreen) -> Void)?
     var onReceive: ((NSScreen) -> Void)?
 
@@ -16,6 +18,7 @@ final class NotchDropController {
         hide()
         guard active, settings.notchEnabled else { return }
         for screen in NSScreen.screens {
+            guard !hasShelfOnScreen(screen) else { continue }
             let notch = ShelfGeometry.notch(frame: screen.frame, topInset: screen.safeAreaInsets.top,
                                             left: screen.auxiliaryTopLeftArea, right: screen.auxiliaryTopRightArea)
             guard (notch != nil && settings.notchEnabled) || (notch == nil && settings.topEdgeEnabled) else { continue }
@@ -36,25 +39,48 @@ final class NotchDropController {
             NSLayoutConstraint.activate([host.leadingAnchor.constraint(equalTo: target.leadingAnchor), host.trailingAnchor.constraint(equalTo: target.trailingAnchor),
                                          host.bottomAnchor.constraint(equalTo: target.bottomAnchor), host.heightAnchor.constraint(equalToConstant: 28)])
             target.onEnter = { [weak self] in
-                self?.dwell?.cancel()
-                self?.dwell = Task { [weak self] in
+                guard let self else { return }
+                self.dwell?.cancel()
+                self.dwellScreen = screen
+                self.dwell = Task { [weak self] in
                     try? await Task.sleep(for: .milliseconds(150))
-                    guard !Task.isCancelled else { return }
-                    self?.onActivate?(screen)
+                    guard !Task.isCancelled, let self else { return }
+                    // A shortcut or another activation may show the shelf while
+                    // this delayed hover is pending.
+                    guard !self.hasShelfOnScreen(screen) else {
+                        self.suppressOccupiedScreens()
+                        return
+                    }
+                    self.onActivate?(screen)
                 }
             }
             target.onExit = { [weak self] in self?.dwell?.cancel() }
             target.onReceive = { [weak self] in self?.dwell?.cancel(); self?.onReceive?(screen) }
             panel.contentView = target
             panel.orderFrontRegardless()
-            panels.append(panel)
+            panels.append((screen, panel))
+        }
+    }
+
+    /// Remove just the now-redundant targets, preserving targets on other screens.
+    func suppressOccupiedScreens() {
+        if let screen = dwellScreen, hasShelfOnScreen(screen) {
+            dwell?.cancel()
+            dwell = nil
+            dwellScreen = nil
+        }
+        panels.removeAll { entry in
+            guard hasShelfOnScreen(entry.screen) else { return false }
+            entry.panel.orderOut(nil)
+            return true
         }
     }
 
     func hide() {
         dwell?.cancel()
         dwell = nil
-        panels.forEach { $0.orderOut(nil) }
+        dwellScreen = nil
+        panels.forEach { $0.panel.orderOut(nil) }
         panels.removeAll()
     }
 }

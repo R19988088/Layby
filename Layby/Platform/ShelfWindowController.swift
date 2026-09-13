@@ -581,6 +581,13 @@ final class ShelfWindowController {
         if dragHandle.isCollapsed != isCollapsed { dragHandle.isCollapsed = isCollapsed }
     }
 
+    /// Count visible shelf content on each display, including capsules and a
+    /// window spanning two displays; the transparent shadow is not an instance.
+    func isVisible(on screenFrame: CGRect) -> Bool {
+        panel.isVisible && panel.frame.insetBy(dx: ShelfLayout.shadowInset, dy: ShelfLayout.shadowInset)
+            .intersects(screenFrame)
+    }
+
     func show(near point: CGPoint, focus: Bool, notchScreen: NSScreen? = nil, expand: Bool = true) {
         finishExpansionAnimation()
         finishCollapseAnimation()
