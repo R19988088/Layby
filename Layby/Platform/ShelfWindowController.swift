@@ -151,6 +151,10 @@ final class ShelfWindowController {
     let destination: DropDestinationView
     let dragHandle = HeaderDragView()
     private let store: ShelfStore
+    private let dockTargets: @MainActor () -> [ShelfDockTarget]
+    private(set) var dockedDisplayID: UInt32?
+    private var detachedDisplayID: UInt32?
+    var isDocked: Bool { dockedDisplayID != nil }
     private let glass: NSGlassEffectView
     private let glassFill = NSView()
     private let surface: ShelfSurfaceView
@@ -171,8 +175,9 @@ final class ShelfWindowController {
     var onBeginMoving: (() -> Void)?
     var onCollapse: (() -> Void)?
 
-    init(store: ShelfStore) {
+    init(store: ShelfStore, dockTargets: @escaping @MainActor () -> [ShelfDockTarget] = { ShelfDockTarget.currentScreens() }) {
         self.store = store
+        self.dockTargets = dockTargets
         panel = ShelfPanel(contentRect: CGRect(origin: .zero, size: ShelfLayout.windowSize),
                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         quickLook = ShelfQuickLookController(store: store, shelfPanel: panel)
@@ -234,9 +239,9 @@ final class ShelfWindowController {
             if self.isCollapsed { self.restore() } else { self.collapse() }
         }
         dragHandle.onBeginDragging = { [weak self] in
-            self?.surface.stopAppearanceAnimation()
-            self?.onBeginMoving?()
+            self?.beginMoving()
         }
+        dragHandle.onEndDragging = { [weak self] in self?.endMoving() }
         dragHandle.updateAccessibilityLabels()
         panel.onHide = { [weak self] in self?.hide() }
         // A collapsed browser retains selection, but its hidden rows must not receive edits.
@@ -298,10 +303,48 @@ final class ShelfWindowController {
             capsule.heightAnchor.constraint(equalToConstant: ShelfLayout.capsuleSize.height)])
     }
 
+    private func setDockedDisplay(_ id: UInt32?) {
+        dockedDisplayID = id
+        dragHandle.isDocked = id != nil
+    }
+
+    private func dockedFrame(for size: CGSize) -> CGRect? {
+        guard let id = dockedDisplayID else { return nil }
+        guard let target = dockTargets().first(where: { $0.displayID == id }) else {
+            setDockedDisplay(nil)
+            return nil
+        }
+        return target.frame(for: size)
+    }
+
+    private func beginMoving() {
+        finishExpansionAnimation()
+        finishCollapseAnimation()
+        surface.stopAppearanceAnimation()
+        detachedDisplayID = dockedDisplayID
+        if isDocked {
+            setDockedDisplay(nil)
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        }
+        onBeginMoving?()
+    }
+
+    private func endMoving() {
+        defer { detachedDisplayID = nil }
+        guard panel.isVisible,
+              let target = dockTargets().first(where: {
+                  $0.displayID != detachedDisplayID && $0.captures(panel.frame)
+              }) else { return }
+        setDockedDisplay(target.displayID)
+        setFrame(target.frame(for: panel.frame.size), animated: true)
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+    }
+
     private func resizeForPresentation() {
         finishExpansionAnimation()
         guard !isCollapsed, panel.isVisible, let screen = panel.screen ?? NSScreen.main else { return }
-        let frame = ShelfGeometry.resizedFrame(panel.frame, size: ShelfLayout.windowSize(for: store.presentation),
+        let frame = dockedFrame(for: ShelfLayout.windowSize(for: store.presentation))
+            ?? ShelfGeometry.resizedFrame(panel.frame, size: ShelfLayout.windowSize(for: store.presentation),
                                                in: screen.visibleFrame.insetBy(dx: 12, dy: 12))
         guard frame != panel.frame else { return }
         setFrame(frame, animated: true)
@@ -334,7 +377,8 @@ final class ShelfWindowController {
         quickLook.dismiss()
         panel.makeFirstResponder(nil)
         expandedFrame = panel.frame
-        let frame = ShelfGeometry.resizedFrame(panel.frame, size: ShelfLayout.capsuleWindowSize,
+        let frame = dockedFrame(for: ShelfLayout.capsuleWindowSize)
+            ?? ShelfGeometry.resizedFrame(panel.frame, size: ShelfLayout.capsuleWindowSize,
                                                in: screen.visibleFrame.insetBy(dx: 12, dy: 12))
         collapsedFrame = frame
         isCollapsed = true
@@ -462,7 +506,8 @@ final class ShelfWindowController {
         let origin = expandedFrame ?? panel.frame
         let parked = collapsedFrame ?? panel.frame
         let moved = origin.offsetBy(dx: panel.frame.minX - parked.minX, dy: panel.frame.maxY - parked.maxY)
-        let frame = ShelfGeometry.resizedFrame(moved, size: ShelfLayout.windowSize(for: store.presentation),
+        let frame = dockedFrame(for: ShelfLayout.windowSize(for: store.presentation))
+            ?? ShelfGeometry.resizedFrame(moved, size: ShelfLayout.windowSize(for: store.presentation),
                                                in: screen.visibleFrame.insetBy(dx: 12, dy: 12))
         // Prepare the backing layers before changing the viewport. Commit the
         // full-size window and its initial compressed appearance together so no
@@ -539,6 +584,15 @@ final class ShelfWindowController {
     func show(near point: CGPoint, focus: Bool, notchScreen: NSScreen? = nil, expand: Bool = true) {
         finishExpansionAnimation()
         finishCollapseAnimation()
+        if dockedFrame(for: panel.frame.size) != nil {
+            if isCollapsed, expand { restore(animated: false, focus: focus) }
+            let size = isCollapsed ? ShelfLayout.capsuleWindowSize : ShelfLayout.windowSize(for: store.presentation)
+            if let frame = dockedFrame(for: size) { setFrame(frame, animated: false) }
+            store.refreshReferences()
+            panel.orderFrontRegardless()
+            if focus { panel.makeKey() }
+            return
+        }
         if isCollapsed {
             if expand { restore(animated: false, focus: focus) }
             // Automatic drag activation must not move or enlarge the user's drop target.
@@ -580,6 +634,8 @@ final class ShelfWindowController {
         quickLook.dismiss()
         surface.stopAppearanceAnimation()
         panel.orderOut(nil)
+        setDockedDisplay(nil)
+        detachedDisplayID = nil
         panel.makeFirstResponder(nil)
         isCollapsed = false
         destination.preservesBrowsingOnDrop = false

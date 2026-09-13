@@ -54,6 +54,7 @@ final class L10n {
     }
 
     private static let english: [String: String] = [
+        "已固定在刘海下方；单击切换大小，用力拖离可解除固定": "Docked below the notch; click to resize, pull away to undock",
         "功能设置": "Features", "通用设置": "General", "设置": "Settings", "设置…": "Settings…",
         "Layby 设置": "Layby Settings", "跟随系统": "Follow System", "语言": "Language",
         "选择应用的显示语言，更改后立即生效。": "Choose the app language. Changes apply immediately.",

@@ -32,6 +32,8 @@ enum ShelfLayout {
 @MainActor
 final class HeaderDragView: NSView {
     var onBeginDragging: (() -> Void)?
+    var onEndDragging: (() -> Void)?
+    var isDocked = false { didSet { updateAccessibilityLabels() } }
     var onClick: (() -> Void)?
     private let grip = CALayer()
     private var hoverArea: NSTrackingArea?
@@ -60,7 +62,8 @@ final class HeaderDragView: NSView {
     func updateAccessibilityLabels() {
         setAccessibilityRole(onClick == nil ? .group : .button)
         setAccessibilityLabel(L10n.text(onClick == nil ? "移动停放区" : (isCollapsed ? "展开停放区" : "收起为迷你胶囊")))
-        let help = isCollapsed ? "单击展开停放区，拖动可移动胶囊" : "单击收起为胶囊，拖动可移动停放区"
+        let help = isDocked ? "已固定在刘海下方；单击切换大小，用力拖离可解除固定"
+            : (isCollapsed ? "单击展开停放区，拖动可移动胶囊" : "单击收起为胶囊，拖动可移动停放区")
         setAccessibilityHelp(L10n.text(help))
         toolTip = L10n.text(help)
     }
@@ -159,12 +162,15 @@ final class HeaderDragView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let initial = mouseDownEvent, !exceededDragThreshold,
-              hypot(event.locationInWindow.x - initial.locationInWindow.x,
-                    event.locationInWindow.y - initial.locationInWindow.y) >= 4 else { return }
+        guard let initial = mouseDownEvent, !isDraggingWindow else { return }
+        let distance = hypot(event.locationInWindow.x - initial.locationInWindow.x,
+                             event.locationInWindow.y - initial.locationInWindow.y)
+        guard distance >= 4 else { return }
         // Once crossed, the gesture stays a drag even if the pointer returns to its start.
         exceededDragThreshold = true
-        guard let window else { return }
+        // Resist small pulls while docked, without treating an unsuccessful pull
+        // as a click. The original press still starts the eventual native drag.
+        guard distance >= (isDocked ? ShelfDockTarget.releaseDistance : 4), let window else { return }
         onBeginDragging?()
         isDraggingWindow = true
         updateGrip(animated: true)
@@ -177,7 +183,7 @@ final class HeaderDragView: NSView {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 if NSEvent.pressedMouseButtons & 1 == 0 || self.window?.isVisible != true {
-                    self.stopTrackingDrag()
+                    self.stopTrackingDrag(completed: self.window?.isVisible == true)
                 }
             }
         }
@@ -189,11 +195,11 @@ final class HeaderDragView: NSView {
     override func mouseUp(with event: NSEvent) {
         let shouldClick = mouseDownEvent != nil && !exceededDragThreshold &&
             bounds.contains(convert(event.locationInWindow, from: nil))
-        stopTrackingDrag()
+        stopTrackingDrag(completed: true)
         if shouldClick { onClick?() }
     }
 
-    func stopTrackingDrag() {
+    func stopTrackingDrag(completed: Bool = false) {
         dragEndTimer?.invalidate()
         dragEndTimer = nil
         mouseDownEvent = nil
@@ -202,6 +208,7 @@ final class HeaderDragView: NSView {
         isDraggingWindow = false
         refreshHover(animated: true)
         NSCursor.arrow.set()
+        if completed { onEndDragging?() }
     }
 
     private func refreshHover(animated: Bool) {

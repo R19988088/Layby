@@ -87,7 +87,7 @@ final class AppCoordinator: NSObject {
         pendingHide?.cancel()
         if !manual, dragActivated, shelf.panel.isVisible { return }
         if !manual { dragActivated = true }
-        automaticPresentation = !manual && store.items.isEmpty && !shelf.isCollapsed
+        automaticPresentation = !manual && store.items.isEmpty && !shelf.isCollapsed && !shelf.isDocked
         shelf.show(near: point, focus: manual, notchScreen: screen, expand: manual || reason == .hotKey)
         Logger.activation.debug("Shelf presented; manual=\(manual)")
     }
