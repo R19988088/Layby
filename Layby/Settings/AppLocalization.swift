@@ -101,6 +101,11 @@ final class L10n {
         "部分文件未能接收，请从来源应用重新拖入。": "Some files could not be received. Drag them again from the source app.",
         "无法创建临时接收目录，请稍后重试。": "Could not create a temporary folder. Please try again.",
         "移动停放区": "Move Shelf", "按住顶部横条并拖动，可以移动窗口": "Hold and drag the top handle to move the window",
-        "暂放到 Layby": "Drop into Layby"
+        "暂放到 Layby": "Drop into Layby",
+        "收起为迷你胶囊": "Collapse to Capsule", "展开停放区": "Expand Shelf",
+        "展开停放区，%@": "Expand shelf, %@",
+        "单击收起为胶囊，拖动可移动停放区": "Click to collapse; drag to move the shelf",
+        "单击展开停放区，拖动可移动胶囊": "Click to expand; drag to move the capsule",
+        "按住把手并拖动，可以移动胶囊": "Hold and drag the handle to move the capsule"
     ]
 }

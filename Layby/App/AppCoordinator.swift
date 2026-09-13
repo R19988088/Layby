@@ -40,6 +40,11 @@ final class AppCoordinator: NSObject {
             self?.dragActivityChanged(false)
         }
         shelf.onHide = { [weak self] in self?.pendingHide?.cancel(); self?.notch.hide() }
+        shelf.onCollapse = { [weak self] in
+            self?.automaticPresentation = false
+            self?.pendingHide?.cancel()
+            self?.notch.hide()
+        }
         shelf.onBeginMoving = { [weak self] in
             self?.automaticPresentation = false
             self?.pendingHide?.cancel()
@@ -82,8 +87,8 @@ final class AppCoordinator: NSObject {
         pendingHide?.cancel()
         if !manual, dragActivated, shelf.panel.isVisible { return }
         if !manual { dragActivated = true }
-        automaticPresentation = !manual && store.items.isEmpty
-        shelf.show(near: point, focus: manual, notchScreen: screen)
+        automaticPresentation = !manual && store.items.isEmpty && !shelf.isCollapsed
+        shelf.show(near: point, focus: manual, notchScreen: screen, expand: manual || reason == .hotKey)
         Logger.activation.debug("Shelf presented; manual=\(manual)")
     }
 
@@ -161,7 +166,7 @@ final class AppCoordinator: NSObject {
         notch.hide()
         dragActivated = false
         if shelf.panel.isVisible {
-            shelf.show(near: NSEvent.mouseLocation, focus: false)
+            shelf.show(near: NSEvent.mouseLocation, focus: false, expand: false)
         }
     }
 

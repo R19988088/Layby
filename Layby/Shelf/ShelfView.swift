@@ -4,7 +4,6 @@ import AppKit
 struct ShelfView: View {
     @Bindable var store: ShelfStore
     let hide: () -> Void
-    let beginMoving: () -> Void
     let presentationChanged: () -> Void
     let preview: (UUID) -> Void
     @Environment(\.colorScheme) private var colorScheme
@@ -72,13 +71,6 @@ struct ShelfView: View {
             .frame(height: ShelfLayout.headerButtonSize)
             .padding(.horizontal, ShelfLayout.headerButtonInset)
             .padding(.top, ShelfLayout.headerButtonInset)
-            .overlay(alignment: .top) {
-                // Keep the grip near the edge without pushing down either button row.
-                // Its centered hit area stays clear of the corner buttons in both modes.
-                ShelfHeaderDragHandle(onBeginDragging: beginMoving)
-                    .frame(width: 100, height: 16)
-                    .padding(.top, 2)
-            }
             .padding(.bottom, 8)
     }
 
@@ -256,12 +248,13 @@ struct ShelfView: View {
 }
 
 /// Only the blue outline animates; the glass and file contents retain their appearance.
-private struct ShelfDropBorder: View {
+struct ShelfDropBorder: View {
     let isTargeted: Bool
+    var cornerRadius: CGFloat = ShelfLayout.cornerRadius
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var blueOutline: some View {
-        RoundedRectangle(cornerRadius: ShelfLayout.cornerRadius)
+        RoundedRectangle(cornerRadius: cornerRadius)
             .strokeBorder(Color(nsColor: .systemBlue), lineWidth: 5)
     }
 

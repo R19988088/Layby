@@ -3,13 +3,14 @@ import SwiftUI
 /// A persistent reflection layer above native glass and below the file content.
 /// Its lighting is independent of key-window state; AppKit still owns the blur.
 struct ShelfGlassChrome: View {
+    var cornerRadius: CGFloat = ShelfLayout.cornerRadius
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
 
     private var isDark: Bool { colorScheme == .dark }
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: ShelfLayout.cornerRadius, style: .continuous)
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
     }
 
     var body: some View {

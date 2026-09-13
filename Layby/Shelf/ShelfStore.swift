@@ -212,7 +212,7 @@ final class ShelfStore {
         }
     }
 
-    @discardableResult func receive(_ info: NSDraggingInfo) -> Bool {
+    @discardableResult func receive(_ info: NSDraggingInfo, preservingBrowsing: Bool = false) -> Bool {
         let sequence = info.draggingSequenceNumber
         if receivedSequences.contains(sequence) { return true }
         guard info.draggingSourceOperationMask.contains(.copy), !isDraggingOut else { return false }
@@ -223,7 +223,9 @@ final class ShelfStore {
         guard !urls.isEmpty || !promises.isEmpty else { return false }
         // A shelf drop always parks files at the root; it never writes into a
         // directory merely because the user happens to be browsing it.
-        resetFolderBrowsing()
+        // Capsule drops still append at the shelf root, without disturbing the
+        // hidden browser's current directory or selection.
+        if !preservingBrowsing { resetFolderBrowsing() }
         _ = add(urls)
         let acceptedPromises = promises.map { receivePromise($0) }.filter { $0 }.count
         guard !urls.isEmpty || acceptedPromises > 0 else { return false }

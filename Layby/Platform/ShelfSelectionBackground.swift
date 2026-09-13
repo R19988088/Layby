@@ -40,7 +40,8 @@ struct ShelfSelectionBackground: NSViewRepresentable {
               let root = window?.contentView else { return }
         var hit = root.hitTest(root.convert(event.locationInWindow, from: nil))
         while let view = hit {
-            if view is ShelfFileSelectionTarget || view is NSControl { return }
+            if let destination = view as? DropDestinationView, destination.blocksInteraction { return }
+            if view is ShelfFileSelectionTarget || view is NSControl || view is HeaderDragView { return }
             hit = view.superview
         }
         store.clearSelection()

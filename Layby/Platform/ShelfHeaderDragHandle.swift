@@ -1,12 +1,18 @@
 import AppKit
 import QuartzCore
-import SwiftUI
 
 enum ShelfLayout {
     static let size = CGSize(width: 200, height: 220)
     static let expandedSize = CGSize(width: 500, height: 360)
+    static let capsuleSize = CGSize(width: 108, height: 20)
+    static let capsuleCornerRadius: CGFloat = 10
+    static let collapseDuration: TimeInterval = 0.28
+    static let capsuleWindowSize = CGSize(width: capsuleSize.width + shadowInset * 2,
+                                         height: capsuleSize.height + shadowInset * 2)
     static let cornerRadius: CGFloat = 26
     static let headerButtonSize: CGFloat = 30
+    static let handleSize = CGSize(width: 100, height: 16)
+    static let handleTopInset: CGFloat = 2
     static let gridMinimumItemWidth: CGFloat = 128
     static let gridColumnSpacing: CGFloat = 10
     static func gridColumns(for width: CGFloat) -> Int {
@@ -22,37 +28,24 @@ enum ShelfLayout {
     }
 }
 
-/// A fixed hit area contains the animated grip, so expansion never changes the hover boundary.
-struct ShelfHeaderDragHandle: NSViewRepresentable {
-    let onBeginDragging: () -> Void
-
-    func makeNSView(context: Context) -> HeaderDragView {
-        let view = HeaderDragView()
-        view.onBeginDragging = onBeginDragging
-        return view
-    }
-
-    func updateNSView(_ view: HeaderDragView, context: Context) {
-        view.onBeginDragging = onBeginDragging
-        view.updateAccessibilityLabels()
-    }
-
-    static func dismantleNSView(_ view: HeaderDragView, coordinator: ()) {
-        view.stopTrackingDrag()
-    }
-}
-
+/// One persistent native handle, mounted above the panel's animated content.
 @MainActor
 final class HeaderDragView: NSView {
     var onBeginDragging: (() -> Void)?
+    var onClick: (() -> Void)?
     private let grip = CALayer()
     private var hoverArea: NSTrackingArea?
     private var dragEndTimer: Timer?
+    private var hoverReconciliation: Task<Void, Never>?
+    private var isPreservingHover = false
     private var isHovered = false
     private var isDraggingWindow = false
+    var isCollapsed = false { didSet { updateAccessibilityLabels() } }
+    private var mouseDownEvent: NSEvent?
+    private var exceededDragThreshold = false
 
-    override init(frame: NSRect) {
-        super.init(frame: frame)
+    init() {
+        super.init(frame: .zero)
         wantsLayer = true
         grip.bounds = CGRect(x: 0, y: 0, width: 80, height: 3)
         grip.cornerRadius = 1.5
@@ -65,11 +58,30 @@ final class HeaderDragView: NSView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     func updateAccessibilityLabels() {
-        setAccessibilityLabel(L10n.text("移动停放区"))
-        setAccessibilityHelp(L10n.text("按住顶部横条并拖动，可以移动窗口"))
+        setAccessibilityRole(onClick == nil ? .group : .button)
+        setAccessibilityLabel(L10n.text(onClick == nil ? "移动停放区" : (isCollapsed ? "展开停放区" : "收起为迷你胶囊")))
+        let help = isCollapsed ? "单击展开停放区，拖动可移动胶囊" : "单击收起为胶囊，拖动可移动停放区"
+        setAccessibilityHelp(L10n.text(help))
+        toolTip = L10n.text(help)
     }
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override var acceptsFirstResponder: Bool { onClick != nil }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard let onClick else { return false }
+        onClick()
+        return true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if onClick != nil, event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
+           event.keyCode == 36 || event.keyCode == 49 {
+            if !event.isARepeat { onClick?() }
+            return
+        }
+        super.keyDown(with: event)
+    }
 
     override func layout() {
         super.layout()
@@ -81,16 +93,44 @@ final class HeaderDragView: NSView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if let hoverArea { removeTrackingArea(hoverArea) }
-        let area = NSTrackingArea(rect: .zero,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
-        hoverArea = area
-        addTrackingArea(area)
-        refreshHover(animated: false)
+        // inVisibleRect follows layout automatically. Replacing the area emits
+        // artificial exit/enter events when the window changes size.
+        if hoverArea == nil {
+            let area = NSTrackingArea(rect: .zero,
+                options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
+            hoverArea = area
+            addTrackingArea(area)
+        }
+        if !isPreservingHover { reconcileHoverAfterLayout() }
+    }
+
+    /// AppKit can query tracking between the window-origin and view-layout
+    /// updates. Keep the current grip through that intermediate geometry.
+    func preserveHoverDuringLayout(_ update: () -> Void) {
+        hoverReconciliation?.cancel()
+        isPreservingHover = true
+        update()
+        reconcileHoverAfterLayout()
+    }
+
+    private func reconcileHoverAfterLayout() {
+        hoverReconciliation?.cancel()
+        hoverReconciliation = Task { [weak self] in
+            await Task.yield()
+            guard !Task.isCancelled, let self else { return }
+            self.hoverReconciliation = nil
+            self.isPreservingHover = false
+            self.refreshHover(animated: true)
+        }
     }
 
     override func viewWillMove(toWindow newWindow: NSWindow?) {
-        if newWindow == nil { stopTrackingDrag() }
+        if newWindow == nil {
+            hoverReconciliation?.cancel()
+            hoverReconciliation = nil
+            isPreservingHover = false
+            stopTrackingDrag()
+        }
         super.viewWillMove(toWindow: newWindow)
     }
 
@@ -104,18 +144,26 @@ final class HeaderDragView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        isHovered = true
-        updateGrip(animated: true)
+        refreshHover(animated: true)
         NSCursor.arrow.set()
     }
 
     override func mouseExited(with event: NSEvent) {
-        isHovered = false
-        updateGrip(animated: true)
+        refreshHover(animated: true)
         if !isDraggingWindow { NSCursor.arrow.set() }
     }
 
     override func mouseDown(with event: NSEvent) {
+        mouseDownEvent = event
+        exceededDragThreshold = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let initial = mouseDownEvent, !exceededDragThreshold,
+              hypot(event.locationInWindow.x - initial.locationInWindow.x,
+                    event.locationInWindow.y - initial.locationInWindow.y) >= 4 else { return }
+        // Once crossed, the gesture stays a drag even if the pointer returns to its start.
+        exceededDragThreshold = true
         guard let window else { return }
         onBeginDragging?()
         isDraggingWindow = true
@@ -135,14 +183,21 @@ final class HeaderDragView: NSView {
         }
         dragEndTimer = timer
         RunLoop.main.add(timer, forMode: .common)
-        window.performDrag(with: event)
+        window.performDrag(with: initial)
     }
 
-    override func mouseUp(with event: NSEvent) { stopTrackingDrag() }
+    override func mouseUp(with event: NSEvent) {
+        let shouldClick = mouseDownEvent != nil && !exceededDragThreshold &&
+            bounds.contains(convert(event.locationInWindow, from: nil))
+        stopTrackingDrag()
+        if shouldClick { onClick?() }
+    }
 
     func stopTrackingDrag() {
         dragEndTimer?.invalidate()
         dragEndTimer = nil
+        mouseDownEvent = nil
+        exceededDragThreshold = false
         guard isDraggingWindow else { return }
         isDraggingWindow = false
         refreshHover(animated: true)
@@ -150,6 +205,9 @@ final class HeaderDragView: NSView {
     }
 
     private func refreshHover(animated: Bool) {
+        guard !isPreservingHover else { return }
+        // Queued enter/exit events can refer to pre-resize coordinates. Use the
+        // current pointer position after layout instead of trusting their type.
         isHovered = window.map { bounds.contains(convert($0.mouseLocationOutsideOfEventStream, from: nil)) } ?? false
         updateGrip(animated: animated)
     }
@@ -158,11 +216,16 @@ final class HeaderDragView: NSView {
         let expanded = isHovered || isDraggingWindow
         let scale: CGFloat = expanded ? 1 : 0.32
         let opacity: Float = isDraggingWindow ? 0.8 : (expanded ? 0.58 : 0.22)
+        // A tracking refresh must not cancel or restart an unchanged hover.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        effectiveAppearance.performAsCurrentDrawingAppearance { grip.backgroundColor = NSColor.labelColor.cgColor }
+        CATransaction.commit()
+        guard grip.transform.m11 != scale || grip.opacity != opacity else { return }
         let currentScale = grip.presentation()?.value(forKeyPath: "transform.scale.x") ?? grip.value(forKeyPath: "transform.scale.x")
         let currentOpacity = grip.presentation()?.opacity ?? grip.opacity
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        effectiveAppearance.performAsCurrentDrawingAppearance { grip.backgroundColor = NSColor.labelColor.cgColor }
         grip.transform = CATransform3DMakeScale(scale, 1, 1)
         grip.opacity = opacity
         CATransaction.commit()

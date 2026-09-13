@@ -7,6 +7,8 @@ final class DropDestinationView: NSView {
     var onEnter: (() -> Void)?
     var onExit: (() -> Void)?
     var onReceive: (() -> Void)?
+    var preservesBrowsingOnDrop = false
+    var blocksInteraction = false
     private(set) var isReceiving = false
 
     init(store: ShelfStore) {
@@ -16,6 +18,11 @@ final class DropDestinationView: NSView {
         registerForDraggedTypes([NSPasteboard.PasteboardType.fileURL] + promiseTypes)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if blocksInteraction { return bounds.contains(convert(point, from: superview)) ? self : nil }
+        return super.hitTest(point)
+    }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         let operation = allowedOperation(sender)
@@ -40,7 +47,7 @@ final class DropDestinationView: NSView {
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         isReceiving = true
         defer { isReceiving = false; store.isDropTargeted = false }
-        let accepted = store.receive(sender)
+        let accepted = store.receive(sender, preservingBrowsing: preservesBrowsingOnDrop)
         if accepted { onReceive?() }
         return accepted
     }
@@ -56,7 +63,7 @@ final class DropDestinationView: NSView {
     }
 
     private func allowedOperation(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard !store.isDraggingOut, sender.draggingSourceOperationMask.contains(.copy),
+        guard !blocksInteraction, !store.isDraggingOut, sender.draggingSourceOperationMask.contains(.copy),
               sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self, NSFilePromiseReceiver.self],
                   options: [.urlReadingFileURLsOnly: true]) else { return [] }
         return .copy
