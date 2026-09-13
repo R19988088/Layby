@@ -5,6 +5,8 @@ import SwiftUI
 
 @MainActor
 final class ShelfPanel: NSPanel {
+    weak var services: ShelfServicesController?
+    var permitsFileServices = true
     var onHide: (() -> Void)?
     var onDelete: (() -> Void)?
     var onSelectAll: (() -> Void)?
@@ -24,6 +26,12 @@ final class ShelfPanel: NSPanel {
     override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { quickLook?.hasItems == true }
     override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) { quickLook?.beginControl(panel) }
     override func endPreviewPanelControl(_ panel: QLPreviewPanel!) { quickLook?.endControl(panel) }
+
+    override func validRequestor(forSendType sendType: NSPasteboard.PasteboardType?,
+                                 returnType: NSPasteboard.PasteboardType?) -> Any? {
+        if permitsFileServices, services?.accepts(sendType: sendType, returnType: returnType) == true { return services }
+        return super.validRequestor(forSendType: sendType, returnType: returnType)
+    }
 
     override func sendEvent(_ event: NSEvent) {
         if event.type == .leftMouseDown { selectionBackground?.handleMouseDown(event) }
@@ -151,6 +159,7 @@ final class ShelfWindowController {
     let destination: DropDestinationView
     let dragHandle = HeaderDragView()
     private let store: ShelfStore
+    private let services: ShelfServicesController
     private let dockTargets: @MainActor () -> [ShelfDockTarget]
     private(set) var dockedDisplayID: UInt32?
     private var detachedDisplayID: UInt32?
@@ -177,11 +186,13 @@ final class ShelfWindowController {
 
     init(store: ShelfStore, dockTargets: @escaping @MainActor () -> [ShelfDockTarget] = { ShelfDockTarget.currentScreens() }) {
         self.store = store
+        services = ShelfServicesController(store: store)
         self.dockTargets = dockTargets
         panel = ShelfPanel(contentRect: CGRect(origin: .zero, size: ShelfLayout.windowSize),
                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         quickLook = ShelfQuickLookController(store: store, shelfPanel: panel)
         panel.quickLook = quickLook
+        panel.services = services
         panel.title = L10n.text("Layby 文件停放区")
         panel.level = .floating
         panel.isFloatingPanel = true
@@ -272,8 +283,7 @@ final class ShelfWindowController {
         guard shelfHost == nil else { return }
         let host = NSHostingView(rootView: ShelfView(store: store,
             hide: { [weak self] in self?.hide() },
-            presentationChanged: { [weak self] in self?.resizeForPresentation() },
-            preview: { [weak self] id in self?.quickLook.preview(id) }))
+            presentationChanged: { [weak self] in self?.resizeForPresentation() }))
         host.sizingOptions = []
         host.translatesAutoresizingMaskIntoConstraints = false
         host.focusRingType = .none
@@ -374,6 +384,7 @@ final class ShelfWindowController {
         finishExpansionAnimation()
         guard panel.isVisible, !isCollapsed, !store.isDraggingOut, !store.isDropTargeted,
               !destination.isReceiving, let screen = panel.screen ?? NSScreen.main else { return }
+        services.cancelServicesMenu()
         quickLook.dismiss()
         panel.makeFirstResponder(nil)
         expandedFrame = panel.frame
@@ -573,6 +584,7 @@ final class ShelfWindowController {
     }
 
     private func updateCornerRadius() {
+        panel.permitsFileServices = !isCollapsed
         let radius = isCollapsed ? ShelfLayout.capsuleCornerRadius : ShelfLayout.cornerRadius
         glass.cornerRadius = radius
         glass.layer?.cornerRadius = radius
@@ -636,6 +648,7 @@ final class ShelfWindowController {
     }
 
     func hide() {
+        services.cancelServicesMenu()
         finishExpansionAnimation()
         finishCollapseAnimation()
         quickLook.dismiss()
@@ -663,6 +676,7 @@ final class ShelfWindowController {
     func stop() {
         hide()
         quickLook.stop()
+        services.stop()
         if let accessibilityObserver { NSWorkspace.shared.notificationCenter.removeObserver(accessibilityObserver) }
     }
 

@@ -204,6 +204,7 @@ final class AppCoordinator: NSObject {
         edit.addItem(withTitle: L10n.text("全选"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit
         NSApp.mainMenu = main
+        if let applicationMenu = applicationItem.submenu { ShelfServicesController.installMenu(in: applicationMenu) }
     }
 
     private static func drawMenuBarIcon() -> NSImage {

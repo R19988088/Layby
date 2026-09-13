@@ -5,7 +5,6 @@ struct ShelfView: View {
     @Bindable var store: ShelfStore
     let hide: () -> Void
     let presentationChanged: () -> Void
-    let preview: (UUID) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -96,8 +95,8 @@ struct ShelfView: View {
                 }
                 roundButton("xmark", label: "关闭并清空停放区") { hide() }
             } else {
-                roundButton("chevron.down", label: "展开文件列表") { store.present(.grid) }
-                    .disabled(store.items.isEmpty)
+                ShelfServicesButton(enabled: !store.dragItems(for: .all).isEmpty)
+                    .frame(width: ShelfLayout.headerButtonSize, height: ShelfLayout.headerButtonSize)
             }
         }
     }
@@ -224,24 +223,6 @@ struct ShelfView: View {
         .id(item.id)
         .accessibilityLabel(L10n.format("%@，%@，拖动以取出此文件", item.displayName, item.displaySubtitle))
         .help(item.displayName)
-        .contextMenu {
-            if item.isDirectory {
-                Button(L10n.text("打开文件夹")) { store.openFolder(item.id) }
-                    .disabled(!item.state.isReady)
-            }
-            Button(L10n.text("快速查看")) { preview(item.id) }
-                .disabled(!item.state.isReady)
-            Divider()
-            if let url = item.url {
-                Button(L10n.text("在 Finder 中显示")) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-                Button(L10n.text("重新检查")) { store.retry(item.id) }
-            }
-            if !store.isBrowsingFolder {
-                Button(L10n.text("从停放区移除")) { store.remove([item.id]) }
-            }
-            Divider()
-            Button(L10n.text("清空停放区")) { store.clear() }
-        }
         .onAppear { store.requestThumbnail(item.id) }
         .onChange(of: item.state) { _, _ in store.requestThumbnail(item.id) }
     }
@@ -281,7 +262,7 @@ struct ShelfDropBorder: View {
 }
 
 /// Opaque fills keep controls legible over glass; hover changes tone without changing the hit area.
-private struct ShelfSolidButtonStyle: ButtonStyle {
+struct ShelfSolidButtonStyle: ButtonStyle {
     var selected = false
 
     func makeBody(configuration: Configuration) -> some View {

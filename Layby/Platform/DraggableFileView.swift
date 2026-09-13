@@ -56,7 +56,19 @@ final class FileDragView<Content: View>: NSView, NSDraggingSource, ShelfFileSele
         super.keyDown(with: event)
     }
 
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard let id = itemID, let panel = window as? ShelfPanel else { return super.menu(for: event) }
+        NSApp.activate()
+        panel.makeKey()
+        panel.makeFirstResponder(self)
+        return panel.services?.contextMenu(for: id) { [weak panel] id in panel?.quickLook?.preview(id) }
+    }
+
     override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.control) {
+            rightMouseDown(with: event)
+            return
+        }
         mouseDownEvent = event
         hasStarted = false
         window?.makeFirstResponder(self)

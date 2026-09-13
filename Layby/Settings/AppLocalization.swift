@@ -54,6 +54,10 @@ final class L10n {
     }
 
     private static let english: [String: String] = [
+        "没有适用的文件服务": "No Applicable File Services", "正在读取文件服务…": "Loading File Services…",
+        "无法执行文件服务“%@”，请确认提供该服务的应用可用。": "Could not run file service “%@”. Check that its provider is available.",
+        "没有适用的服务": "No Applicable Services", "服务": "Services", "对全部文件使用服务": "Use Services with All Files",
+        "文件不可用，请重新检查后再使用服务": "File unavailable. Recheck it before using Services.",
         "已固定在刘海下方；单击切换大小，用力拖离可解除固定": "Docked below the notch; click to resize, pull away to undock",
         "功能设置": "Features", "通用设置": "General", "设置": "Settings", "设置…": "Settings…",
         "Layby 设置": "Layby Settings", "跟随系统": "Follow System", "语言": "Language",
