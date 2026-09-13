@@ -2,7 +2,7 @@ import AppKit
 
 /// A display-local magnetic anchor, expressed in global screen coordinates.
 struct ShelfDockTarget: Equatable {
-    static let gap: CGFloat = 8
+    static let gap: CGFloat = 4
     static let releaseDistance: CGFloat = 28
     let displayID: UInt32
     let notch: CGRect
