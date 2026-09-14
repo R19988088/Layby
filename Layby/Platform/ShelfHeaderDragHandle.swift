@@ -222,11 +222,13 @@ final class HeaderDragView: NSView {
     private func updateGrip(animated: Bool) {
         let expanded = isHovered || isDraggingWindow
         let scale: CGFloat = expanded ? 1 : 0.32
-        let opacity: Float = isDraggingWindow ? 0.8 : (expanded ? 0.58 : 0.22)
+        let opacity: Float = isDraggingWindow ? 1 : (expanded ? 0.9 : 0.72)
         // A tracking refresh must not cancel or restart an unchanged hover.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        effectiveAppearance.performAsCurrentDrawingAppearance { grip.backgroundColor = NSColor.labelColor.cgColor }
+        let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        // Keep the idle grip legible too: charcoal on light glass, pale gray on dark glass.
+        grip.backgroundColor = NSColor(white: isDark ? 0.9 : 0.22, alpha: 1).cgColor
         CATransaction.commit()
         guard grip.transform.m11 != scale || grip.opacity != opacity else { return }
         let currentScale = grip.presentation()?.value(forKeyPath: "transform.scale.x") ?? grip.value(forKeyPath: "transform.scale.x")
