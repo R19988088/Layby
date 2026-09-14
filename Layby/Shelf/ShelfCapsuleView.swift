@@ -5,7 +5,7 @@ struct ShelfCapsuleView: View {
     @Bindable var store: ShelfStore
 
     var body: some View {
-        ShelfGlassChrome(cornerRadius: ShelfLayout.capsuleCornerRadius)
+        Color.clear
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay {
                 ShelfDropBorder(isTargeted: store.isDropTargeted, cornerRadius: ShelfLayout.capsuleCornerRadius)

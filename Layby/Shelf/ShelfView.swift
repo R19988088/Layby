@@ -54,7 +54,6 @@ struct ShelfView: View {
         }
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background { ShelfGlassChrome() }
         .overlay {
             ShelfDropBorder(isTargeted: store.isDropTargeted)
                 .allowsHitTesting(false)
