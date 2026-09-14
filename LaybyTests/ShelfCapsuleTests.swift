@@ -65,7 +65,7 @@ struct ShelfCapsuleTests {
                 handle.updateTrackingAreas()
                 handle.mouseExited(with: mouse(.leftMouseDown, x: 250, window: window))
                 #expect(grip.transform.m11 == 1)
-                #expect(grip.opacity == 0.58)
+                #expect(grip.opacity == 0.9)
                 #expect(grip.animation(forKey: "hover") == nil)
                 window.testMouseLocation = CGPoint(x: 50, y: 8)
             }
@@ -83,7 +83,7 @@ struct ShelfCapsuleTests {
         window.testMouseLocation = CGPoint(x: 150, y: 8)
         handle.mouseExited(with: mouse(.leftMouseDown, x: 150, window: window))
         #expect(grip.transform.m11 == 0.32)
-        #expect(grip.opacity == 0.22)
+        #expect(grip.opacity == 0.72)
         if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             #expect(grip.animation(forKey: "hover") != nil)
         }
@@ -234,12 +234,7 @@ struct ShelfCapsuleTests {
             #expect(handle.layer?.sublayers?.first === grip)
             #expect(handle.layer?.animation(forKey: "layby.expand") == nil)
             let content = try #require(shelf.destination.subviews.compactMap { $0 as? NSHostingView<ShelfView> }.first)
-            let glass: NSView
-            if #available(macOS 26.0, *) {
-                glass = try #require(shelf.panel.contentView?.subviews.compactMap { $0 as? NSGlassEffectView }.first)
-            } else {
-                glass = try #require(shelf.panel.contentView?.subviews.compactMap { $0 as? NSVisualEffectView }.first)
-            }
+            let glass = try #require(shelf.panel.contentView?.subviews.compactMap { $0 as? ShelfGlassView }.first)
             if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                 #expect(shelf.destination.blocksInteraction)
                 for view in [content as NSView, glass] {

@@ -1,108 +1,134 @@
 <p align="center">
-  <img src="docs/assets/app-icon.png" width="128" height="128" alt="Layby app icon">
+  <img src="assets/app-icon.png" width="128" height="128" alt="Layby app icon">
 </p>
+
 
 <h1 align="center">Layby</h1>
 
-<p align="center">给待会还会用到的文件，一个随手可取的地方。</p>
+<p align="center">English | <a href="README.zh-CN.md">简体中文</a></p>
 
-Layby 是一个基于 Swift 和 SwiftUI / AppKit 编写的 macOS 文件暂存工具。把文件拖进浮动停放区，松开鼠标，找到目标窗口后再拖出去。也可以从不同文件夹收集文件，最后一起拖走。
+<p align="center">A handy place for files you’ll need in a moment.</p>
 
-## 功能
+Layby is a macOS file shelf built with Swift and SwiftUI / AppKit. Drag files onto the floating shelf, release the mouse, then drag them out once you’ve found the destination window. You can also collect files from different folders and drag them out together.
 
-- **随手呼出**：拖拽文件时摇晃鼠标、按住修饰键，或拖到刘海区域；也支持全局快捷键和菜单栏入口。
-- **集中暂存**：接收文件、文件夹，以及来源应用通过 File Promise 提供的文件。可以拖动整个堆叠，也可以展开后选择部分文件拖出。
-- **查看和选择**：在缩略图网格与文件列表之间切换，支持多选、键盘导航、复制和在 Finder 中显示。
-- **浏览文件夹**：双击进入文件夹，逐层返回，直接预览、复制或拖出其中的文件。
-- **快速查看**：选中文件后按空格，使用 macOS 原生 Quick Look 预览。
-- **收起与停靠**：停放区可以收成迷你胶囊，收起后仍能接收文件；拖到刘海下方可吸附固定。
-- **文件服务**：通过右键菜单或堆叠上的服务按钮，把文件交给已安装应用提供的 macOS Services。可用项目取决于本机安装的应用与系统权限。
-- **多语言**：跟随系统语言，也可以在设置中切换，即时生效。
+## Features
 
-## 使用
+- **Quick activation**: Shake the mouse while dragging files, hold a modifier key, or drag to the notch area. A global keyboard shortcut and a menu bar entry are also available.
+- **File collection**: Accept files, folders, and files provided by other apps through File Promises. Drag the whole stack or expand it to select individual files.
+- **Views and selection**: Switch between a thumbnail grid and a file list, with multiple selection, keyboard navigation, copying, and Reveal in Finder.
+- **Folder browsing**: Double-click a folder to browse its contents, navigate back through each level, and preview, copy, or drag files directly.
+- **Quick Look**: Select a file and press Space to preview it with native macOS Quick Look.
+- **Collapse and dock**: Collapse the shelf into a mini capsule that still accepts files, or drag it to the top center of any display to dock it.
+- **File services**: Send files to macOS Services provided by installed apps using the context menu or the services button on the stack. Available services depend on your installed apps and system permissions.
+- **Multiple languages**: Follow the system language or switch languages in settings, with changes applied immediately.
 
-1. 在 Finder 或其他应用中开始拖拽文件，摇晃鼠标，或按住 **Shift** 呼出停放区。
-2. 把文件放进去，再切换到目标文件夹或应用。
-3. 拖动文件堆叠，一次取出全部文件；点击底部文件数量按钮，可以展开网格或列表，挑选需要的文件。
+## Installation
 
-默认全局快捷键是 **⌃⌥空格**（Control + Option + Space）。呼出方式、修饰键、快捷键和摇晃灵敏度均可在设置中调整。没有刘海的显示器，可以启用「无刘海时使用屏幕顶部中央」。
+Requires **macOS 15.6 or later**.
 
-单击顶部横条可收起或展开，拖动横条可移动窗口。把窗口拖到刘海下方附近后松手即可固定；需要移走时，按住横条继续向外拖离。
+Download a prebuilt app archive or `.dmg` from [GitHub Releases](https://github.com/xavierwang77/Layby/releases). No source build is required. Choose an app attachment for the release, rather than GitHub’s automatically generated `Source code` archives.
 
-### 键盘与鼠标操作
+- **App archive**: Extract the archive, then drag `Layby.app` into your **Applications** folder.
+- **DMG**: Double-click the `.dmg`, drag `Layby.app` into your **Applications** folder, then eject the disk image after copying finishes.
 
-以下文件操作用于展开后的网格或列表。
+### First launch: Allow the unverified app
 
-| 操作 | 效果 |
+Prebuilt release apps are **not signed with an Apple Developer ID certificate or notarized by Apple**. On first launch, macOS may report that the developer cannot be verified or that Apple cannot check the app for malicious software. Once you’ve confirmed that the app came from this project’s Releases page:
+
+1. Double-click `Layby.app` in **Applications**.
+2. When the verification warning appears, click **Cancel** (**Done** on some macOS versions). Do not choose **Move to Trash**.
+3. Open ** → System Settings → Privacy & Security** and scroll down to **Security**.
+4. Find the message saying Layby was blocked and click **Open Anyway**.
+5. Authenticate with your password or Touch ID if prompted, then click **Open** in the confirmation dialog.
+
+macOS will remember the exception, so you can open the app normally afterward. If **Open Anyway** is missing, try opening `Layby.app` again, then return to **Privacy & Security**.
+
+See [Apple’s official guide](https://support.apple.com/en-us/102445) for details.
+
+## Usage
+
+1. Start dragging files in Finder or another app, then shake the mouse or hold **Shift** to show the shelf.
+2. Drop the files onto it, then switch to the destination folder or app.
+3. Drag the file stack to take all files at once. Click the file count button at the bottom to expand the grid or list and choose specific files.
+
+The default global shortcut is **⌃⌥Space** (Control + Option + Space). Activation methods, modifier keys, the shortcut, and shake sensitivity can all be adjusted in settings. On displays without a notch, you can enable the option to use the top center of the screen instead.
+
+Click the top bar to collapse or expand the shelf, or drag it to move the window. Release it near the top center of any display to dock it below the notch, or below the menu bar on displays without a notch. To undock it, drag the top bar away from that area.
+
+### Keyboard and mouse controls
+
+These file actions apply to the expanded grid or list.
+
+| Action | Result |
 | --- | --- |
-| ⌘ 单击 / Shift 单击 | 切换选中 / 连续范围选择 |
-| 方向键 | 移动选择 |
-| ⌘A | 全选当前层已就绪的文件 |
-| ⌘C | 复制选中文件，可在 Finder 中粘贴 |
-| 空格 | 打开或关闭快速查看 |
-| 双击文件夹 | 浏览文件夹内容 |
-| Delete | 从停放区移除选中项，不删除原文件；浏览文件夹时不生效 |
-| Esc | 优先关闭快速查看，否则关闭并清空停放区 |
-| ⌘W | 关闭并清空停放区 |
+| ⌘-click / Shift-click | Toggle selection / Select a contiguous range |
+| Arrow keys | Move selection |
+| ⌘A | Select all ready files at the current level |
+| ⌘C | Copy selected files for pasting in Finder |
+| Space | Open or close Quick Look |
+| Double-click a folder | Browse its contents |
+| Delete | Remove selected items from the shelf without deleting the originals; unavailable while browsing a folder |
+| Esc | Close Quick Look first; otherwise close and clear the shelf |
+| ⌘W | Close and clear the shelf |
 
-### 文件会怎样处理？
+### How are files handled?
 
-普通文件保留在原位置，Layby 保存的是文件引用。拖出使用复制操作，成功拖出后条目仍会留在停放区，方便再次使用。
+Regular files stay in their original locations; Layby stores references to them. Dragging files out uses a copy operation. Items remain on the shelf after a successful drag so you can use them again.
 
-**关闭停放区会清空全部条目，下次打开为空。** 收起为胶囊则会保留内容、选择和当前浏览位置。停放区内容不会在重启应用后恢复。
+**Closing the shelf clears all items, leaving it empty the next time you open it.** Collapsing it into a capsule preserves its contents, selection, and current browsing location. Shelf contents are not restored after restarting the app.
 
-来源应用通过 File Promise 传入的文件会先保存为临时副本，相关操作结束后清理。已交给文件服务的临时副本会保留到本次应用退出，以便外部应用异步读取。移除条目或清空停放区不会删除用户的原文件。
+Files supplied by other apps through File Promises are saved as temporary copies and cleaned up when the relevant operations finish. Temporary copies handed to file services remain until the app quits so external apps can read them asynchronously. Removing items or clearing the shelf does not delete your original files.
 
-目前接收的是文件和文件夹，不支持直接暂存纯文本或网页链接。
+Layby currently accepts files and folders. Plain text and web links cannot be stored directly.
 
-### 拖拽呼出没有反应？
+### Drag activation not working?
 
-在 Layby 设置中检查对应呼出方式是否启用。如果在其他应用中摇晃文件没有反应，可以前往「系统设置 → 隐私与安全性 → 辅助功能」允许 Layby，再回到设置中重新检查。全局快捷键和手动投放仍可使用。
+Check that the relevant activation method is enabled in Layby settings. If shaking files in other apps does not work, allow Layby in **System Settings → Privacy & Security → Accessibility**, then check again in Layby settings. The global shortcut and manual file drops remain available.
 
-设置中的应用排除列表按 Bundle ID 匹配，仅关闭指定应用中的摇晃和修饰键呼出。
+The app exclusion list in settings matches apps by Bundle ID. It only disables shake and modifier-key activation within those apps.
 
-## 从源码构建
+## Building from source
 
-项目不依赖第三方库。应用由 Xcode 工程构建，`Package.swift` 用于运行测试。
+The project has no third-party dependencies. The Xcode project builds the app; `Package.swift` runs the tests.
 
 ### Xcode
 
-使用支持 macOS 27 SDK 的 Xcode，打开工程：
+Use an Xcode version that supports the macOS 27 SDK and open the project:
 
 ```sh
 open Layby.xcodeproj
 ```
 
-选择 `Layby` scheme 和 `My Mac`，按 `⌘R` 运行。如遇签名问题，在 Signing & Capabilities 中选择自己的开发团队。
+Select the `Layby` scheme and `My Mac`, then press `⌘R` to run. If you encounter signing issues, select your own development team in Signing & Capabilities.
 
-### 命令行
+### Command line
 
-安装包含 macOS 27 SDK 的 Xcode 或 Command Line Tools 后，在仓库根目录运行：
+With Xcode or Command Line Tools that include the macOS 27 SDK installed, run from the repository root:
 
 ```sh
 bash scripts/build-local.sh
 open build/local/Layby.app
 ```
 
-脚本通过 `xcrun` 选择编译器和 SDK，构建当前 Mac 架构的应用，并进行本地 ad-hoc 签名。默认输出为 `build/local/Layby.app`，可通过 `LAYBY_BUILD_DIR` 指定输出目录。
+The script uses `xcrun` to select the compiler and SDK, builds for your Mac’s architecture, and applies a local ad-hoc signature. Output defaults to `build/local/Layby.app`; set `LAYBY_BUILD_DIR` to use a different output directory.
 
-## 测试与开发
+## Testing and development
 
 ```sh
 swift test
 ```
 
-测试覆盖拖拽触发、文件生命周期、选择与导航、文件夹浏览、窗口布局、胶囊、刘海吸附和文件服务。部分测试使用原生窗口及剪贴板，需要已登录且可访问桌面的 macOS 环境。若 Command Line Tools 的 Testing 宏加载失败，可参考[测试运行说明](docs/mini-capsule.md#验证)。
+Tests cover drag activation, file lifecycle, selection and navigation, folder browsing, window layout, the capsule, docking across multiple displays, and file services. Some tests use native windows and the clipboard, so they require a logged-in macOS session with desktop access. If the Testing macro fails to load with Command Line Tools, see the [test instructions (Chinese)](docs/mini-capsule.md#验证).
 
-另外提供两个原生界面测试脚本，运行时会短暂显示测试窗口或菜单：
+Two additional scripts test native UI behavior and briefly show test windows or menus:
 
 ```sh
 bash scripts/test-quick-look.sh
 bash scripts/test-services-popup.sh
 ```
 
-代码按职责放在 `Layby/` 下：`Activation/` 处理呼出，`Shelf/` 管理状态与界面，`Files/` 负责文件访问和目录浏览，`Platform/` 对接原生窗口、拖放、Quick Look 与 Services，`Settings/` 管理偏好和语言。
+Code under `Layby/` is organized by responsibility: `Activation/` handles activation, `Shelf/` manages state and UI, `Files/` handles file access and folder browsing, `Platform/` integrates native windows, drag and drop, Quick Look, and Services, and `Settings/` manages preferences and languages.
 
-交互细节见 [文件夹浏览](docs/folder-browsing.md)、[快速查看](docs/quick-look.md)、[迷你胶囊](docs/mini-capsule.md)、[刘海吸附](docs/notch-docking.md) 和 [文件服务](docs/file-services.md)。
+For interaction details, see the documentation on [folder browsing](docs/folder-browsing.md), [Quick Look](docs/quick-look.md), [the mini capsule](docs/mini-capsule.md), [notch docking](docs/notch-docking.md), and [file services](docs/file-services.md) (in Chinese).
 
-欢迎提交 Issue 或 PR。反馈拖拽问题时，请附上 macOS 版本、来源应用、使用的呼出方式和复现步骤；涉及刘海或多显示器时，也请说明屏幕配置。
+Issues and pull requests are welcome. When reporting drag-and-drop problems, include your macOS version, source app, activation method, and steps to reproduce. For notch or multiple-display issues, also describe your display setup.

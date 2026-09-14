@@ -5,6 +5,7 @@
 # Swift Package Manager and local builds
 .build/
 build/
+dist/
 
 # Xcode build output and test results
 DerivedData/
