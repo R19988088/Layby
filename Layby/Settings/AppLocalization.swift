@@ -58,7 +58,7 @@ final class L10n {
         "无法执行文件服务“%@”，请确认提供该服务的应用可用。": "Could not run file service “%@”. Check that its provider is available.",
         "没有适用的服务": "No Applicable Services", "服务": "Services", "对全部文件使用服务": "Use Services with All Files",
         "文件不可用，请重新检查后再使用服务": "File unavailable. Recheck it before using Services.",
-        "已固定在刘海下方；单击切换大小，用力拖离可解除固定": "Docked below the notch; click to resize, pull away to undock",
+        "已固定在屏幕顶部中央；单击切换大小，用力拖离可解除固定": "Docked at the top center of the display; click to resize, pull away to undock",
         "功能设置": "Features", "通用设置": "General", "设置": "Settings", "设置…": "Settings…",
         "Layby 设置": "Layby Settings", "跟随系统": "Follow System", "语言": "Language",
         "选择应用的显示语言，更改后立即生效。": "Choose the app language. Changes apply immediately.",

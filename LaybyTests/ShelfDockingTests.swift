@@ -4,6 +4,39 @@ import Testing
 
 @MainActor @Suite(.serialized)
 struct ShelfDockingTests {
+    @Test func externalDisplaysUseTheirOwnTopCenter() {
+        // Left, above, and below the primary display, including a portrait display.
+        for screen in [CGRect(x: -2560, y: 0, width: 2560, height: 1440),
+                       CGRect(x: 200, y: 1080, width: 1920, height: 1080),
+                       CGRect(x: 1920, y: -1920, width: 1080, height: 1920)] {
+            for menuHeight: CGFloat in [0, 24, 38] {
+                let visible = CGRect(x: screen.minX + 80, y: screen.minY,
+                    width: screen.width - 80, height: screen.height - menuHeight)
+                let target = ShelfDockTarget.target(displayID: 42, frame: screen,
+                    visibleFrame: visible, notch: nil)
+                for size in [ShelfLayout.windowSize, ShelfLayout.windowSize(for: .grid), ShelfLayout.capsuleWindowSize] {
+                    let frame = target.frame(for: size)
+                    #expect(frame.midX == screen.midX)
+                    let content = frame.insetBy(dx: ShelfLayout.shadowInset, dy: ShelfLayout.shadowInset)
+                    #expect(content.maxY == visible.maxY - ShelfDockTarget.gap)
+                    #expect(visible.contains(content))
+                    #expect(target.captures(frame.offsetBy(dx: 80, dy: -52)))
+                    #expect(!target.captures(frame.offsetBy(dx: 81, dy: 0)))
+                    #expect(!target.captures(frame.offsetBy(dx: 0, dy: -53)))
+                }
+            }
+        }
+    }
+
+    @Test func everyConnectedDisplayProvidesADockTarget() {
+        let targets = ShelfDockTarget.currentScreens()
+        #expect(targets.count == NSScreen.screens.count)
+        for screen in NSScreen.screens {
+            let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+            #expect(targets.contains { $0.displayID == id?.uint32Value })
+        }
+    }
+
     private func mouse(_ type: NSEvent.EventType, x: CGFloat, window: NSWindow) -> NSEvent {
         NSEvent.mouseEvent(with: type, location: CGPoint(x: x, y: 8), modifierFlags: [], timestamp: 0,
             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
@@ -11,12 +44,12 @@ struct ShelfDockingTests {
 
     @Test func dockingUsesTheSameAnchorForEverySizeAndNegativeScreenOrigins() {
         let target = ShelfDockTarget(displayID: 1,
-            notch: CGRect(x: -900, y: 960, width: 200, height: 40),
+            anchor: CGRect(x: -900, y: 960, width: 200, height: 40),
             visibleFrame: CGRect(x: -1600, y: 0, width: 1600, height: 960))
         for size in [ShelfLayout.windowSize, ShelfLayout.windowSize(for: .grid), ShelfLayout.capsuleWindowSize] {
             let frame = target.frame(for: size)
-            #expect(frame.midX == target.notch.midX)
-            #expect(target.notch.minY - (frame.maxY - ShelfLayout.shadowInset) == ShelfDockTarget.gap)
+            #expect(frame.midX == target.anchor.midX)
+            #expect(target.anchor.minY - (frame.maxY - ShelfLayout.shadowInset) == ShelfDockTarget.gap)
             #expect(target.captures(frame.offsetBy(dx: 80, dy: -50)))
             #expect(!target.captures(frame.offsetBy(dx: 0, dy: -53)))
             #expect(!target.captures(frame.offsetBy(dx: 200, dy: 0)))
@@ -58,12 +91,14 @@ struct ShelfDockingTests {
         #expect(starts == 2 && ends == 1)
     }
 
-    @Test func everyPresentationDocksRetainsItsAnchorAndCanBeDeliberatelyDetached() async throws {
+    @Test(arguments: [false, true])
+    func everyPresentationDocksRetainsItsAnchorAndCanBeDeliberatelyDetached(hasNotch: Bool) async throws {
         _ = NSApplication.shared
         let screen = try #require(NSScreen.main)
-        let target = ShelfDockTarget(displayID: 100,
-            notch: CGRect(x: screen.visibleFrame.midX - 100, y: screen.visibleFrame.maxY - 24, width: 200, height: 24),
-            visibleFrame: screen.visibleFrame)
+        let target = ShelfDockTarget.target(displayID: 100, frame: screen.frame,
+            visibleFrame: screen.visibleFrame,
+            notch: hasNotch ? CGRect(x: screen.frame.midX - 100, y: screen.visibleFrame.maxY - 24,
+                                     width: 200, height: 24) : nil)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("LaybyDock-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -111,11 +146,11 @@ struct ShelfDockingTests {
         }
     }
 
-    @Test func missingNotchOrRemovedDisplayNeverLeavesAnInvisibleDock() async throws {
+    @Test func missingTargetOrRemovedDisplayNeverLeavesAnInvisibleDock() async throws {
         _ = NSApplication.shared
         let screen = try #require(NSScreen.main)
         let target = ShelfDockTarget(displayID: 100,
-            notch: CGRect(x: screen.visibleFrame.midX - 100, y: screen.visibleFrame.maxY - 24, width: 200, height: 24),
+            anchor: CGRect(x: screen.visibleFrame.midX - 100, y: screen.visibleFrame.maxY - 24, width: 200, height: 24),
             visibleFrame: screen.visibleFrame)
         var targets: [ShelfDockTarget] = []
         let shelf = ShelfWindowController(store: ShelfStore(), dockTargets: { targets })

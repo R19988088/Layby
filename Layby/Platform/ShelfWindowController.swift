@@ -5,6 +5,18 @@ import SwiftUI
 
 @MainActor
 final class ShelfPanel: NSPanel {
+    var isDocked = false
+
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        // Only transparent shadow padding may extend into the menu bar while docked.
+        if isDocked, let screen = screen ?? self.screen,
+           screen.visibleFrame.contains(frameRect.insetBy(dx: ShelfLayout.shadowInset,
+                                                          dy: ShelfLayout.shadowInset)) {
+            return frameRect
+        }
+        return super.constrainFrameRect(frameRect, to: screen)
+    }
+
     weak var services: ShelfServicesController?
     var permitsFileServices = true
     var onHide: (() -> Void)?
@@ -333,6 +345,7 @@ final class ShelfWindowController {
 
     private func setDockedDisplay(_ id: UInt32?) {
         dockedDisplayID = id
+        panel.isDocked = id != nil
         dragHandle.isDocked = id != nil
     }
 

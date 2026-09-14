@@ -62,7 +62,7 @@ final class HeaderDragView: NSView {
     func updateAccessibilityLabels() {
         setAccessibilityRole(onClick == nil ? .group : .button)
         setAccessibilityLabel(L10n.text(onClick == nil ? "移动停放区" : (isCollapsed ? "展开停放区" : "收起为迷你胶囊")))
-        let help = isDocked ? "已固定在刘海下方；单击切换大小，用力拖离可解除固定"
+        let help = isDocked ? "已固定在屏幕顶部中央；单击切换大小，用力拖离可解除固定"
             : (isCollapsed ? "单击展开停放区，拖动可移动胶囊" : "单击收起为胶囊，拖动可移动停放区")
         setAccessibilityHelp(L10n.text(help))
         toolTip = L10n.text(help)
