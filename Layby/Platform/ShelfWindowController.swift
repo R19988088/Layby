@@ -164,7 +164,7 @@ final class ShelfWindowController {
     private(set) var dockedDisplayID: UInt32?
     private var detachedDisplayID: UInt32?
     var isDocked: Bool { dockedDisplayID != nil }
-    private let glass: NSGlassEffectView
+    private let glass: NSView
     private let glassFill = NSView()
     private let surface: ShelfSurfaceView
     private let quickLook: ShelfQuickLookController
@@ -207,16 +207,34 @@ final class ShelfWindowController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
         destination = DropDestinationView(store: store)
-        glass = NSGlassEffectView()
-        glass.style = .regular
-        glass.cornerRadius = ShelfLayout.cornerRadius
+        glassFill.wantsLayer = true
+        if #available(macOS 26.0, *) {
+            let effect = NSGlassEffectView()
+            effect.style = .regular
+            effect.cornerRadius = ShelfLayout.cornerRadius
+            effect.contentView = glassFill
+            glass = effect
+        } else {
+            // Keep the same surface and interaction hierarchy on pre-glass systems.
+            let effect = NSVisualEffectView()
+            effect.material = .hudWindow
+            effect.blendingMode = .behindWindow
+            effect.state = .active
+            glassFill.translatesAutoresizingMaskIntoConstraints = false
+            effect.addSubview(glassFill)
+            NSLayoutConstraint.activate([
+                glassFill.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
+                glassFill.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+                glassFill.topAnchor.constraint(equalTo: effect.topAnchor),
+                glassFill.bottomAnchor.constraint(equalTo: effect.bottomAnchor)
+            ])
+            glass = effect
+        }
         glass.wantsLayer = true
         glass.layer?.cornerRadius = ShelfLayout.cornerRadius
         glass.layer?.cornerCurve = .continuous
         glass.layer?.masksToBounds = true
         glass.focusRingType = .none
-        glassFill.wantsLayer = true
-        glass.contentView = glassFill
         surface = ShelfSurfaceView(frame: CGRect(origin: .zero, size: ShelfLayout.windowSize))
         panel.contentView = surface
         glass.translatesAutoresizingMaskIntoConstraints = false
@@ -586,7 +604,9 @@ final class ShelfWindowController {
     private func updateCornerRadius() {
         panel.permitsFileServices = !isCollapsed
         let radius = isCollapsed ? ShelfLayout.capsuleCornerRadius : ShelfLayout.cornerRadius
-        glass.cornerRadius = radius
+        if #available(macOS 26.0, *), let effect = glass as? NSGlassEffectView {
+            effect.cornerRadius = radius
+        }
         glass.layer?.cornerRadius = radius
         surface.cornerRadius = radius
         destination.layer?.cornerRadius = radius

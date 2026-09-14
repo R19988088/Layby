@@ -87,13 +87,25 @@ final class NotchDropController {
 
 private struct NotchHint: View {
     var body: some View {
+        styledHint
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+    }
+
+    @ViewBuilder
+    private var styledHint: some View {
+        if #available(macOS 26.0, *) {
+            hintContent.glassEffect(.regular, in: Capsule())
+        } else {
+            hintContent.background(.ultraThinMaterial, in: Capsule())
+        }
+    }
+
+    private var hintContent: some View {
         HStack(spacing: 5) {
             Image(systemName: "tray.and.arrow.down")
             Text(L10n.text("暂放到 Layby"))
         }
         .font(.system(size: 10, weight: .medium))
         .padding(.horizontal, 12).padding(.vertical, 5)
-        .glassEffect(.regular, in: Capsule())
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
     }
 }

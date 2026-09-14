@@ -234,7 +234,12 @@ struct ShelfCapsuleTests {
             #expect(handle.layer?.sublayers?.first === grip)
             #expect(handle.layer?.animation(forKey: "layby.expand") == nil)
             let content = try #require(shelf.destination.subviews.compactMap { $0 as? NSHostingView<ShelfView> }.first)
-            let glass = try #require(shelf.panel.contentView?.subviews.compactMap { $0 as? NSGlassEffectView }.first)
+            let glass: NSView
+            if #available(macOS 26.0, *) {
+                glass = try #require(shelf.panel.contentView?.subviews.compactMap { $0 as? NSGlassEffectView }.first)
+            } else {
+                glass = try #require(shelf.panel.contentView?.subviews.compactMap { $0 as? NSVisualEffectView }.first)
+            }
             if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                 #expect(shelf.destination.blocksInteraction)
                 for view in [content as NSView, glass] {

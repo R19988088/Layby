@@ -7,7 +7,7 @@ mkdir -p "$app/Contents/MacOS" "$probe_root/modules"
 sources=()
 while IFS= read -r -d '' source; do sources+=("$source"); done < <(find "$project_root/Layby" -name '*.swift' ! -name MyApp.swift -print0)
 xcrun --sdk macosx swiftc -parse-as-library -swift-version 5 \
-    -sdk "$(xcrun --sdk macosx --show-sdk-path)" -target "$(uname -m)-apple-macosx27.0" \
+    -sdk "$(xcrun --sdk macosx --show-sdk-path)" -target "$(uname -m)-apple-macosx15.6" \
     -module-cache-path "$probe_root/modules" "${sources[@]}" \
     "$project_root/scripts/testing/ServicesPopupSmoke.swift" -o "$app/Contents/MacOS/ServicesPopupSmoke"
 cat > "$app/Contents/Info.plist" <<'PLIST'
