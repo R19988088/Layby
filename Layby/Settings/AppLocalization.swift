@@ -54,6 +54,11 @@ final class L10n {
     }
 
     private static let english: [String: String] = [
+        "关于": "About", "当前版本": "Version", "未知版本": "Unknown version",
+        "给待会还会用到的文件，一个随手可取的地方。": "A handy place for files you’ll need in a moment.",
+        "支持 Layby": "Support Layby", "给 Layby 一颗 Star": "Star Layby on GitHub",
+        "如果 Layby 对你有帮助，欢迎在 GitHub 上点一颗 Star，支持项目继续成长。": "Enjoying Layby? Give it a star on GitHub to support the project’s growth.",
+        "在 GitHub 上点一颗 Star": "Give it a star on GitHub",
         "没有适用的文件服务": "No Applicable File Services", "正在读取文件服务…": "Loading File Services…",
         "无法执行文件服务“%@”，请确认提供该服务的应用可用。": "Could not run file service “%@”. Check that its provider is available.",
         "没有适用的服务": "No Applicable Services", "服务": "Services", "对全部文件使用服务": "Use Services with All Files",
@@ -72,11 +77,8 @@ final class L10n {
         "点击键位后按下新组合键，Esc 取消。": "Click the shortcut, then press a new combination. Esc cancels.",
         "兼容性": "Compatibility", "已识别的拖拽": "Detected drags", "%d 次": "%d",
         "辅助功能访问": "Accessibility access", "已允许": "Allowed", "未允许": "Not allowed",
-        "鼠标检测无需读取文件内容。若其他应用中摇晃无响应，可在系统设置中允许辅助功能访问；快捷键和手动投放仍可使用。": "Pointer detection does not read file contents. If shaking in other apps does not work, allow Accessibility access in System Settings. Shortcuts and manual drops remain available.",
+        "若在其他应用中摇晃无反应，可在系统设置中允许辅助功能访问。": "If shaking in other apps does not work, allow Accessibility access in System Settings.",
         "打开辅助功能设置": "Open Accessibility Settings", "重新检查": "Check Again",
-        "排除应用的 Bundle ID，每行一个": "Excluded app bundle IDs, one per line",
-        "排除应用仅关闭摇晃和修饰键呼出。": "Exclusions only disable shake and modifier activation.",
-        "关闭停放区会清空全部内容，下次打开为空。原文件不会删除；应用接收的临时副本会在使用结束后清理。拖出默认为复制。": "Closing the shelf clears its contents. Original files stay in place; temporary copies are removed after use. Dragging out copies files.",
         "按下组合键…": "Press shortcut…", "请包含修饰键": "Include a modifier", "空格": "Space",
         "快捷键无法注册（%d），请更换组合键。": "Could not register shortcut (%d). Choose another combination.",
         "该组合键不可用（%d），已保留原快捷键。": "Shortcut unavailable (%d). Your previous shortcut was kept.",

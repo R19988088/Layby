@@ -2,10 +2,22 @@ import AppKit
 import SwiftUI
 
 private enum SettingsPage: String, CaseIterable, Identifiable {
-    case features, general
+    case features, general, about
     var id: Self { self }
-    var title: String { self == .features ? "功能设置" : "通用设置" }
-    var symbol: String { self == .features ? "slider.horizontal.3" : "gearshape" }
+    var title: String {
+        switch self {
+        case .features: "功能设置"
+        case .general: "通用设置"
+        case .about: "关于"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .features: "slider.horizontal.3"
+        case .general: "gearshape"
+        case .about: "info.circle"
+        }
+    }
 }
 
 struct SettingsView: View {
@@ -42,8 +54,11 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text(L10n.text(selectedPage.title)).font(.system(size: 22, weight: .semibold))
                     .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 8)
-                if selectedPage == .features { featureSettings }
-                else { generalSettings }
+                switch selectedPage {
+                case .features: featureSettings
+                case .general: generalSettings
+                case .about: aboutSettings
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .windowBackgroundColor), ignoresSafeAreaEdges: .vertical)
@@ -89,21 +104,66 @@ struct SettingsView: View {
             Section {
                 LabeledContent(L10n.text("已识别的拖拽"), value: L10n.format("%d 次", coordinator.observation.observedDragCount))
                 LabeledContent(L10n.text("辅助功能访问"), value: L10n.text(coordinator.observation.hasAccessibilityTrust ? "已允许" : "未允许"))
-                Text(L10n.text("鼠标检测无需读取文件内容。若其他应用中摇晃无响应，可在系统设置中允许辅助功能访问；快捷键和手动投放仍可使用。"))
+                Text(L10n.text("若在其他应用中摇晃无反应，可在系统设置中允许辅助功能访问。"))
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     Button(L10n.text("打开辅助功能设置")) { coordinator.openAccessibilitySettings() }
                     Button(L10n.text("重新检查")) { coordinator.refreshObservation() }
                 }
-                TextField(L10n.text("排除应用的 Bundle ID，每行一个"), text: $settings.excludedBundleIDs, axis: .vertical)
-                    .lineLimit(2...3).font(.system(.caption, design: .monospaced))
-                Text(L10n.text("排除应用仅关闭摇晃和修饰键呼出。"))
-                    .font(.caption).foregroundStyle(.secondary)
             } header: {
                 Text(L10n.text("兼容性"))
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var aboutSettings: some View {
+        Form {
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Layby").font(.system(size: 28, weight: .semibold))
+                    Text(L10n.text("给待会还会用到的文件，一个随手可取的地方。"))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 12)
+                LabeledContent(L10n.text("当前版本"), value: AppInfo.version)
+            }
+            Section {
+                HStack(alignment: .top, spacing: 16) {
+                    Image("GitHubMark")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 28, height: 28)
+                        .frame(width: 48, height: 48)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(L10n.text("支持 Layby"))
+                            .font(.headline)
+                        Text(supportDescription)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .tint(.accentColor)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var supportDescription: AttributedString {
+        var text = AttributedString(L10n.text("如果 Layby 对你有帮助，欢迎在 GitHub 上点一颗 Star，支持项目继续成长。"))
+        if let range = text.range(of: L10n.text("在 GitHub 上点一颗 Star")) {
+            text[range].link = AppInfo.repositoryURL
+        }
+        return text
     }
 
     private var generalSettings: some View {
@@ -115,10 +175,6 @@ struct SettingsView: View {
                 .pickerStyle(.menu)
             } footer: {
                 Text(L10n.text("选择应用的显示语言，更改后立即生效。"))
-            }
-            Section {
-                Text(L10n.text("关闭停放区会清空全部内容，下次打开为空。原文件不会删除；应用接收的临时副本会在使用结束后清理。拖出默认为复制。"))
-                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

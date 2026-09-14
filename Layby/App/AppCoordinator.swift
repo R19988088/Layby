@@ -143,6 +143,10 @@ final class AppCoordinator: NSObject {
         NSWorkspace.shared.open(url)
     }
 
+    @objc private func openRepository() {
+        NSWorkspace.shared.open(AppInfo.repositoryURL)
+    }
+
     @objc func showSettings() {
         // A normal settings window can become key while the app remains absent from the Dock.
         if NSApp.activationPolicy() != .accessory { NSApp.setActivationPolicy(.accessory) }
@@ -176,9 +180,13 @@ final class AppCoordinator: NSObject {
 
     private func installMenus() {
         let menu = NSMenu()
-        menu.addItem(withTitle: L10n.text("新建停放区"), action: #selector(showShelf), keyEquivalent: "")
+        let newShelf = menu.addItem(withTitle: L10n.text("新建停放区"), action: #selector(showShelf), keyEquivalent: "")
+        newShelf.image = NSImage(systemSymbolName: "plus.rectangle.on.folder", accessibilityDescription: nil)
         menu.addItem(.separator())
-        menu.addItem(withTitle: L10n.text("设置…"), action: #selector(showSettings), keyEquivalent: ",")
+        let preferences = menu.addItem(withTitle: L10n.text("设置…"), action: #selector(showSettings), keyEquivalent: ",")
+        preferences.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
+        let support = menu.addItem(withTitle: L10n.text("给 Layby 一颗 Star"), action: #selector(openRepository), keyEquivalent: "")
+        support.image = NSImage(systemSymbolName: "star", accessibilityDescription: nil)
         menu.addItem(.separator())
         let quit = menu.addItem(withTitle: L10n.text("退出 Layby"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         for item in menu.items where item.action != nil { item.target = item == quit ? NSApp : self }
