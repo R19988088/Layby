@@ -176,9 +176,7 @@ final class ShelfWindowController {
     private(set) var dockedDisplayID: UInt32?
     private var detachedDisplayID: UInt32?
     var isDocked: Bool { dockedDisplayID != nil }
-    private let glass: NSView
-    private let glassFill = ShelfGlassContentView(frame: .zero)
-    private var backdropAppearanceView: NSView?
+    private let glass = ShelfGlassView(frame: .zero)
     private let surface: ShelfSurfaceView
     private let quickLook: ShelfQuickLookController
     private var accessibilityObserver: NSObjectProtocol?
@@ -220,34 +218,6 @@ final class ShelfWindowController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
         destination = DropDestinationView(store: store)
-        glassFill.wantsLayer = true
-        if #available(macOS 26.0, *) {
-            let effect = NSGlassEffectView()
-            effect.style = .regular
-            effect.cornerRadius = ShelfLayout.cornerRadius
-            effect.contentView = glassFill
-            glass = effect
-        } else {
-            // Keep the same surface and interaction hierarchy on pre-glass systems.
-            let effect = NSVisualEffectView()
-            effect.material = .hudWindow
-            effect.blendingMode = .behindWindow
-            effect.state = .active
-            glassFill.translatesAutoresizingMaskIntoConstraints = false
-            effect.addSubview(glassFill)
-            NSLayoutConstraint.activate([
-                glassFill.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
-                glassFill.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
-                glassFill.topAnchor.constraint(equalTo: effect.topAnchor),
-                glassFill.bottomAnchor.constraint(equalTo: effect.bottomAnchor)
-            ])
-            glass = effect
-        }
-        glass.wantsLayer = true
-        glass.layer?.cornerRadius = ShelfLayout.cornerRadius
-        glass.layer?.cornerCurve = .continuous
-        glass.layer?.masksToBounds = true
-        glass.focusRingType = .none
         surface = ShelfSurfaceView(frame: CGRect(origin: .zero, size: ShelfLayout.windowSize))
         panel.contentView = surface
         glass.translatesAutoresizingMaskIntoConstraints = false
@@ -268,31 +238,8 @@ final class ShelfWindowController {
             destination.topAnchor.constraint(equalTo: glass.topAnchor),
             destination.bottomAnchor.constraint(equalTo: glass.bottomAnchor)
         ])
-        // Glass communicates background-driven light/dark changes to its contentView.
-        // Forward that local appearance to ALL content hosts and native controls.
-        // Keep them outside the glass transform so the persistent grip never shrinks
-        // and the file content does not receive the collapse/expand transform twice.
-        if #available(macOS 26.0, *) {
-            let backdrop = ShelfBackdropAppearanceView(frame: .zero)
-            backdrop.translatesAutoresizingMaskIntoConstraints = false
-            // Keep the native sampling surface beneath the main glass, within the
-            // capsule footprint. It must remain rendered for AppKit to sample it.
-            surface.addSubview(backdrop, positioned: .below, relativeTo: glass)
-            NSLayoutConstraint.activate([
-                backdrop.centerXAnchor.constraint(equalTo: glass.centerXAnchor),
-                backdrop.topAnchor.constraint(equalTo: glass.topAnchor),
-                backdrop.widthAnchor.constraint(equalToConstant: ShelfLayout.capsuleSize.width),
-                backdrop.heightAnchor.constraint(equalToConstant: ShelfLayout.capsuleSize.height)
-            ])
-            backdrop.onAppearanceChange = { [weak glass, weak destination] appearance in
-                glass?.appearance = appearance
-                destination?.appearance = appearance
-            }
-            backdropAppearanceView = backdrop
-        } else {
-            glassFill.onAppearanceChange = { [weak destination] appearance in
-                destination?.appearance = appearance
-            }
+        glass.onContentAppearanceChange = { [weak destination] appearance in
+            destination?.appearance = appearance
         }
         dragHandle.translatesAutoresizingMaskIntoConstraints = false
         destination.addSubview(dragHandle)
@@ -420,6 +367,10 @@ final class ShelfWindowController {
 
     private func setFrame(_ frame: CGRect, animated: Bool) {
         surface.stopAppearanceAnimation()
+        if !isCollapsed {
+            glass.expandedSize = CGSize(width: frame.width - ShelfLayout.shadowInset * 2,
+                                        height: frame.height - ShelfLayout.shadowInset * 2)
+        }
         if !isCollapsed, shelfSizeConstraints.count == 2 {
             shelfSizeConstraints[0].constant = frame.width - ShelfLayout.shadowInset * 2
             shelfSizeConstraints[1].constant = frame.height - ShelfLayout.shadowInset * 2
@@ -644,10 +595,7 @@ final class ShelfWindowController {
     private func updateCornerRadius() {
         panel.permitsFileServices = !isCollapsed
         let radius = isCollapsed ? ShelfLayout.capsuleCornerRadius : ShelfLayout.cornerRadius
-        if #available(macOS 26.0, *), let effect = glass as? NSGlassEffectView {
-            effect.cornerRadius = radius
-        }
-        glass.layer?.cornerRadius = radius
+        glass.isCollapsed = isCollapsed
         surface.cornerRadius = radius
         destination.layer?.cornerRadius = radius
         if dragHandle.isCollapsed != isCollapsed { dragHandle.isCollapsed = isCollapsed }
@@ -722,6 +670,7 @@ final class ShelfWindowController {
         expandedFrame = nil
         collapsedFrame = nil
         updateCornerRadius()
+        glass.resetContentAppearance()
         store.clear()
         // Hidden SwiftUI rows can retain item snapshots and their file leases. Tear them
         // down now; the next presentation builds fresh content from the empty store.
@@ -747,10 +696,7 @@ final class ShelfWindowController {
             finishCollapseAnimation()
         }
         destination.wantsLayer = true
-        glassFill.refreshAppearance()
-        if #available(macOS 26.0, *) {
-            (backdropAppearanceView as? ShelfBackdropAppearanceView)?.refreshAppearance()
-        }
+        glass.refreshAccessibilityBackground()
         destination.layer?.backgroundColor = NSColor.clear.cgColor
         dragHandle.updateAccessibilityLabels()
         updateCornerRadius()

@@ -29,12 +29,13 @@ import AppKit
         background.orderFrontRegardless()
         let store = ShelfStore()
         let shelf = ShelfWindowController(store: store)
-        guard let glass = shelf.panel.contentView?.subviews.compactMap({ $0 as? NSGlassEffectView }).first else { exit(2) }
+        guard let glass = shelf.panel.contentView?.subviews.compactMap({ $0 as? ShelfGlassView }).first else { exit(2) }
         var failures = 0
         // Change only this test app's base appearance; keep real system settings intact.
         for base in [NSAppearance.Name.aqua, .darkAqua] {
             NSApp.appearance = NSAppearance(named: base)
             for mode in [ShelfPresentation.stack, .grid, .list] {
+                shelf.hide()
                 store.present(mode)
                 shelf.show(near: CGPoint(x: screen.visibleFrame.midX, y: screen.visibleFrame.midY), focus: false)
                 for collapsed in [false, true] {
@@ -42,8 +43,8 @@ import AppKit
                     for white in [true, false, true] {
                         background.backgroundColor = white ? .white : .black
                         background.display()
-                        let expected: NSAppearance.Name = white ? .aqua : .darkAqua
-                        let views = [glass, shelf.destination, shelf.dragHandle]
+                        let expected: NSAppearance.Name = collapsed ? (white ? .aqua : .darkAqua) : base
+                        let views = [collapsed ? glass.capsuleContent : glass.expandedEffect, shelf.destination, shelf.dragHandle]
                         // Allow native material and NSAppearance propagation to settle.
                         try? await Task.sleep(for: .milliseconds(500))
                         for _ in 0..<15 {
@@ -53,6 +54,17 @@ import AppKit
                         let passed = views.allSatisfy { $0.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == expected }
                         print("\(passed ? "PASS" : "FAIL"): base=\(base.rawValue) \(mode) capsule=\(collapsed) backdrop=\(white ? "white" : "black")")
                         if !passed { failures += 1 }
+                        if collapsed {
+                            shelf.restore(animated: false, focus: false)
+                            background.backgroundColor = white ? .black : .white
+                            background.display()
+                            try? await Task.sleep(for: .milliseconds(500))
+                            let retained = [glass.expandedEffect, glass.expandedContent, shelf.destination, shelf.dragHandle]
+                                .allSatisfy { $0.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == expected }
+                            print("\(retained ? "PASS" : "FAIL"): expansion retains capsule theme")
+                            if !retained { failures += 1 }
+                            shelf.collapse(animated: false)
+                        }
                     }
                 }
                 shelf.restore(animated: false, focus: false)
@@ -60,7 +72,7 @@ import AppKit
         }
         shelf.stop()
         background.close()
-        print("Native backdrop checks: \(36 - failures)/36 passed")
+        print("Native backdrop checks: \(54 - failures)/54 passed")
         exit(failures == 0 ? 0 : 1)
     }
 }
