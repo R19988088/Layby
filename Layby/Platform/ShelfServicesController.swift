@@ -114,7 +114,11 @@ final class ShelfServicesController: NSObject, @MainActor NSServicesMenuRequesto
             menu.addItem(ShelfMenuAction("重新检查") { [store] in store.retry(id) })
         }
         if !store.isBrowsingFolder {
-            menu.addItem(ShelfMenuAction("从停放区移除") { [store] in store.remove([id]) })
+            if store.category == .desktop {
+                menu.addItem(ShelfMenuAction("移到废纸篓") { [store] in store.deleteDesktopItems([id]) })
+            } else {
+                menu.addItem(ShelfMenuAction("从停放区移除") { [store] in store.remove([id]) })
+            }
         }
         menu.addItem(.separator())
         menu.addItem(ShelfMenuAction("清空停放区") { [store] in store.clear() })

@@ -45,6 +45,7 @@ struct ShelfItem: Identifiable {
 
 @Observable @MainActor
 final class ShelfStore {
+    private static let desktopBookmarkKey = "desktopReadWriteBookmark"
     private(set) var items: [ShelfItem] = [] { didSet { onPreviewChange?() } }
     var selection: Set<UUID> = [] {
         didSet {
@@ -116,9 +117,9 @@ final class ShelfStore {
         }
         let lease = FileAccessLease(url: url)
         do {
-            let bookmark = try url.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
+            let bookmark = try url.bookmarkData(options: [.withSecurityScope],
                                                 includingResourceValuesForKeys: nil, relativeTo: nil)
-            UserDefaults.standard.set(bookmark, forKey: "desktopBookmark")
+            UserDefaults.standard.set(bookmark, forKey: Self.desktopBookmarkKey)
             loadDesktop(lease)
             notice = nil
         } catch {
@@ -144,7 +145,7 @@ final class ShelfStore {
         if category == .desktop {
             if !desktopLoaded {
                 var desktopURL = desktopDirectoryURL
-                if let bookmark = UserDefaults.standard.data(forKey: "desktopBookmark") {
+                if let bookmark = UserDefaults.standard.data(forKey: Self.desktopBookmarkKey) {
                     var stale = false
                     if let restored = try? URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope],
                                                relativeTo: nil, bookmarkDataIsStale: &stale) {
@@ -158,6 +159,11 @@ final class ShelfStore {
         } else if items.isEmpty {
             presentation = .stack
         }
+    }
+
+    func requestDesktopAuthorizationIfNeeded() {
+        guard UserDefaults.standard.data(forKey: Self.desktopBookmarkKey) == nil else { return }
+        authorizeDesktop()
     }
 
     var selectionSummary: String? {
@@ -299,6 +305,9 @@ final class ShelfStore {
         let urls = objects.compactMap { $0 as? URL }.filter(\.isFileURL)
         let promises = objects.compactMap { $0 as? NSFilePromiseReceiver }
         guard !urls.isEmpty || !promises.isEmpty else { return false }
+        if category == .desktop && desktopBrowser.depth == 1 {
+            return receiveOnDesktop(urls: urls, promises: promises, sequence: sequence)
+        }
         // A shelf drop always parks files at the root; it never writes into a
         // directory merely because the user happens to be browsing it.
         // Capsule drops still append at the shelf root, without disturbing the
@@ -312,6 +321,41 @@ final class ShelfStore {
         let total = info.draggingPasteboard.pasteboardItems?.count ?? objects.count
         notice = total > objects.count ? "已加入支持的文件，其他内容已跳过。" : nil
         return true
+    }
+
+    private func receiveOnDesktop(urls: [URL], promises: [NSFilePromiseReceiver], sequence: Int) -> Bool {
+        guard let directory = desktopBrowser.directory?.url else { return false }
+        var copied = 0
+        for url in urls where url.isFileURL {
+            do {
+                try FileManager.default.copyItem(at: url, to: uniqueDestination(for: url.lastPathComponent, in: directory))
+                copied += 1
+            } catch { Logger.files.error("Desktop copy failed: \(error.localizedDescription, privacy: .private)") }
+        }
+        let acceptedPromises = promises.map { receivePromise($0, toDesktop: directory) }.filter { $0 }.count
+        guard copied > 0 || acceptedPromises > 0 else {
+            notice = "无法保存到桌面，请检查桌面权限。"
+            return false
+        }
+        receivedSequences.append(sequence)
+        if receivedSequences.count > 64 { receivedSequences.removeFirst() }
+        desktopBrowser.reload()
+        notice = nil
+        return true
+    }
+
+    private func uniqueDestination(for name: String, in directory: URL) -> URL {
+        let source = URL(fileURLWithPath: name)
+        let base = source.deletingPathExtension().lastPathComponent
+        let ext = source.pathExtension
+        var candidate = directory.appendingPathComponent(name)
+        var index = 2
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            let suffix = ext.isEmpty ? " \(index)" : " \(index).\(ext)"
+            candidate = directory.appendingPathComponent(base + suffix)
+            index += 1
+        }
+        return candidate
     }
 
     func copySelection() {
@@ -402,7 +446,30 @@ final class ShelfStore {
     func removeSelection() {
         // Child rows are a directory listing, not independently parked items.
         guard !isBrowsingFolder else { return }
+        if category == .desktop { deleteDesktopItems(selection); return }
         remove(selection)
+    }
+
+    func deleteDesktopItems(_ ids: Set<UUID>) {
+        guard category == .desktop, desktopBrowser.depth == 1 else { return }
+        var failed = false
+        for item in desktopBrowser.items where ids.contains(item.id) {
+            guard let url = item.url else { continue }
+            do { try FileManager.default.trashItem(at: url, resultingItemURL: nil) }
+            catch { failed = true }
+        }
+        desktopBrowser.reload()
+        selection.removeAll()
+        notice = failed ? "部分文件无法移到废纸篓。" : nil
+    }
+
+    func dragOperation(for scope: ShelfDragScope) -> NSDragOperation {
+        category == .desktop ? [.copy, .move] : [.copy]
+    }
+
+    func refreshDesktop() {
+        guard category == .desktop else { return }
+        desktopBrowser.reload()
     }
 
     private func resetFolderBrowsing() {
@@ -418,7 +485,7 @@ final class ShelfStore {
         }
     }
 
-    @discardableResult func receivePromise(_ receiver: NSFilePromiseReceiver) -> Bool {
+    @discardableResult func receivePromise(_ receiver: NSFilePromiseReceiver, toDesktop directory: URL? = nil) -> Bool {
         let id = UUID()
         let expected = generation
         do {
@@ -438,6 +505,14 @@ final class ShelfStore {
                         }
                         Logger.files.error("Inbound promise failed: \(error.localizedDescription, privacy: .private)")
                         self.notice = "部分文件未能接收，请从来源应用重新拖入。"
+                    } else if let directory {
+                        do {
+                            try FileManager.default.moveItem(at: url, to: self.uniqueDestination(for: url.lastPathComponent, in: directory))
+                            self.desktopBrowser.reload()
+                        } catch { self.notice = "文件接收完成，但无法保存到桌面。" }
+                        self.items.removeAll { $0.id == id }
+                        self.imports.removeValue(forKey: id)
+                        self.importTimeouts.removeValue(forKey: id)?.cancel()
                     } else {
                         self.items.removeAll { $0.id == id }
                         _ = self.add([url], managedDirectory: destination)

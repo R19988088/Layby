@@ -31,6 +31,8 @@ final class ShelfGlassView: NSView {
         layer?.cornerRadius = ShelfLayout.cornerRadius
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = true
+        layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.22).cgColor
+        layer?.borderWidth = 0.6
         focusRingType = .none
         addSubview(expandedEffect)
         addSubview(capsuleEffect)

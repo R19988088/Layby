@@ -12,6 +12,7 @@ final class AppCoordinator: NSObject {
     @ObservationIgnored private lazy var hotKey = GlobalHotKeyService()
     @ObservationIgnored private lazy var notch = NotchDropController(store: store, settings: settings)
     @ObservationIgnored private lazy var shelf = ShelfWindowController(store: store)
+    @ObservationIgnored private let desktopIcons = DesktopIconHider()
     @ObservationIgnored private var settingsWindow: NSWindow?
     @ObservationIgnored private var statusItem: NSStatusItem?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
@@ -22,6 +23,7 @@ final class AppCoordinator: NSObject {
 
     func start() {
         L10n.configure(settings.language)
+        desktopIcons.start()
         store.switchCategory(.desktop)
         installMenus()
         settings.onChange = { [weak self] in self?.applySettings() }
@@ -57,7 +59,10 @@ final class AppCoordinator: NSObject {
         observation.start()
         applySettings()
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
-            object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.resetInteraction() } })
+            object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated {
+                self?.desktopIcons.refresh()
+                self?.resetInteraction()
+            } })
         observers.append(NotificationCenter.default.addObserver(forName: NSLocale.currentLocaleDidChangeNotification,
             object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.applySettings() } })
         for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification, NSWorkspace.didWakeNotification] {
@@ -68,6 +73,7 @@ final class AppCoordinator: NSObject {
         workspaceObservers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
             object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.observation.refreshPermission() } })
         showShelf()
+        DispatchQueue.main.async { [weak self] in self?.store.requestDesktopAuthorizationIfNeeded() }
     }
 
     func stop() {
@@ -76,6 +82,7 @@ final class AppCoordinator: NSObject {
         hotKey.stop()
         notch.hide()
         shelf.stop()
+        desktopIcons.stop()
         observers.forEach(NotificationCenter.default.removeObserver)
         workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
         if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }

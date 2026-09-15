@@ -132,9 +132,10 @@ final class ShelfSurfaceView: NSView {
         wantsLayer = true
         focusRingType = .none
         layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.masksToBounds = false
         layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowOpacity = 0.24
-        layer?.shadowRadius = 10
+        layer?.shadowOpacity = 0.30
+        layer?.shadowRadius = 9
         layer?.shadowOffset = CGSize(width: 0, height: -3)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }

@@ -127,10 +127,11 @@ final class FileDragView<Content: View>: NSView, NSDraggingSource, ShelfFileSele
     }
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        context == .outsideApplication ? .copy : []
+        context == .outsideApplication ? store.dragOperation(for: scope) : []
     }
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
         store.isDraggingOut = false
+        if operation.contains(.move) { store.refreshDesktop() }
         activeItems.removeAll()
         mouseDownEvent = nil
         // An unsuccessful destination never removes the user's references.
