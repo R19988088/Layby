@@ -14,7 +14,7 @@ struct ShelfView: View {
     private var countLabel: String { L10n.fileCount(store.items.count) }
     private var summary: String {
         if let selectionSummary = store.selectionSummary { return selectionSummary }
-        if store.folderBrowser.isLoading { return L10n.text("正在读取文件夹…") }
+        if store.activeBrowser.isLoading { return L10n.text("正在读取文件夹…") }
         let visible = store.visibleItems
         let pending = visible.filter { $0.state == .loading }.count
         if pending > 0 { return L10n.format("正在接收 %d 个文件…", pending) }
@@ -33,10 +33,10 @@ struct ShelfView: View {
         VStack(spacing: 0) {
             header
             Group {
-                if store.isBrowsingFolder && (store.folderBrowser.isLoading || store.folderBrowser.error != nil || store.visibleItems.isEmpty) {
+                if store.showsDirectoryStatus {
                     folderStatus
                 }
-                else if store.items.isEmpty { emptyState }
+                else if store.category == .temporary && store.items.isEmpty { emptyState }
                 else if store.presentation == .stack { stack }
                 else { browser }
             }
@@ -74,17 +74,23 @@ struct ShelfView: View {
 
     private var headerControls: some View {
         HStack(spacing: 8) {
-            if store.presentation.isExpanded {
+            Picker("分类", selection: Binding(get: { store.category }, set: { store.switchCategory($0) })) {
+                Text("桌面").tag(ShelfCategory.desktop)
+                Text("临时文件").tag(ShelfCategory.temporary)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 150)
+            if store.presentation.isExpanded && !(store.category == .desktop && store.desktopBrowser.depth == 1) {
                 roundButton("chevron.left", label: store.isBrowsingFolder ? "返回上一层" : "返回文件堆叠") { store.goBack() }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(store.folderBrowser.directory?.displayName ?? countLabel)
+                    Text(store.activeBrowser.directory?.displayName ?? countLabel)
                         .font(.system(size: 14, weight: .semibold)).truncationMode(.middle)
                     Text(summary).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 }
                 .lineLimit(1)
                 .layoutPriority(1)
             } else {
-                roundButton("xmark", label: "关闭并清空停放区") { hide() }
+                Spacer(minLength: 8)
             }
             Spacer(minLength: 8)
             if store.presentation.isExpanded {
@@ -92,7 +98,6 @@ struct ShelfView: View {
                     layoutButton("square.grid.2x2", label: "缩略图网格", mode: .grid)
                     layoutButton("list.bullet", label: "文件列表", mode: .list)
                 }
-                roundButton("xmark", label: "关闭并清空停放区") { hide() }
             } else {
                 ShelfServicesButton(enabled: !store.dragItems(for: .all).isEmpty)
                     .frame(width: ShelfLayout.headerButtonSize, height: ShelfLayout.headerButtonSize)
@@ -125,13 +130,16 @@ struct ShelfView: View {
 
     private var folderStatus: some View {
         VStack(spacing: 10) {
-            if store.folderBrowser.isLoading {
+            if store.activeBrowser.isLoading {
                 ProgressView().controlSize(.small)
                 Text(L10n.text("正在读取文件夹…"))
-            } else if let error = store.folderBrowser.error {
+            } else if let error = store.activeBrowser.error {
                 Text(L10n.text(error)).multilineTextAlignment(.center)
                 Button(L10n.text("重新检查")) { store.reloadFolder() }
                     .buttonStyle(ShelfSolidButtonStyle()).padding(8)
+                if store.category == .desktop {
+                    Button("授权桌面…") { store.authorizeDesktop() }
+                }
             } else {
                 Text(L10n.text("此文件夹为空"))
             }

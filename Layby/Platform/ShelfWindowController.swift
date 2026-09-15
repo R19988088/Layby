@@ -94,6 +94,32 @@ final class ShelfPanel: NSPanel {
     }
 }
 
+@MainActor
+private final class ShelfResizeHandle: NSView {
+    enum Edge { case left, right }
+    let edge: Edge
+    var onResize: ((NSEvent) -> Void)?
+    private var startPoint: NSPoint?
+
+    init(edge: Edge) {
+        self.edge = edge
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        setAccessibilityElement(true)
+        setAccessibilityRole(.splitter)
+        setAccessibilityLabel(edge == .left ? "调整左下角大小" : "调整右下角大小")
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func mouseDown(with event: NSEvent) { startPoint = event.locationInWindow }
+    override func mouseDragged(with event: NSEvent) {
+        guard startPoint != nil else { return }
+        onResize?(event)
+    }
+    override func mouseUp(with event: NSEvent) { startPoint = nil }
+}
+
 /// A transparent window surface with an explicit rounded shadow, independent of key state.
 @MainActor
 final class ShelfSurfaceView: NSView {
@@ -179,6 +205,8 @@ final class ShelfWindowController {
     private let glass = ShelfGlassView(frame: .zero)
     private let surface: ShelfSurfaceView
     private let quickLook: ShelfQuickLookController
+    private let leftResizeHandle = ShelfResizeHandle(edge: .left)
+    private let rightResizeHandle = ShelfResizeHandle(edge: .right)
     private var accessibilityObserver: NSObjectProtocol?
     private var shelfHost: NSHostingView<ShelfView>?
     private var capsuleHost: NSHostingView<ShelfCapsuleView>?
@@ -200,7 +228,7 @@ final class ShelfWindowController {
         services = ShelfServicesController(store: store)
         self.dockTargets = dockTargets
         panel = ShelfPanel(contentRect: CGRect(origin: .zero, size: ShelfLayout.windowSize),
-                           styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+                           styleMask: [.borderless, .nonactivatingPanel, .resizable], backing: .buffered, defer: false)
         quickLook = ShelfQuickLookController(store: store, shelfPanel: panel)
         panel.quickLook = quickLook
         panel.services = services
@@ -243,11 +271,23 @@ final class ShelfWindowController {
         }
         dragHandle.translatesAutoresizingMaskIntoConstraints = false
         destination.addSubview(dragHandle)
+        destination.addSubview(leftResizeHandle)
+        destination.addSubview(rightResizeHandle)
+        leftResizeHandle.translatesAutoresizingMaskIntoConstraints = false
+        rightResizeHandle.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             dragHandle.centerXAnchor.constraint(equalTo: destination.centerXAnchor),
             dragHandle.topAnchor.constraint(equalTo: destination.topAnchor, constant: ShelfLayout.handleTopInset),
             dragHandle.widthAnchor.constraint(equalToConstant: ShelfLayout.handleSize.width),
             dragHandle.heightAnchor.constraint(equalToConstant: ShelfLayout.handleSize.height)
+            ,leftResizeHandle.leadingAnchor.constraint(equalTo: destination.leadingAnchor),
+            leftResizeHandle.bottomAnchor.constraint(equalTo: destination.bottomAnchor),
+            leftResizeHandle.widthAnchor.constraint(equalToConstant: 28),
+            leftResizeHandle.heightAnchor.constraint(equalToConstant: 28),
+            rightResizeHandle.trailingAnchor.constraint(equalTo: destination.trailingAnchor),
+            rightResizeHandle.bottomAnchor.constraint(equalTo: destination.bottomAnchor),
+            rightResizeHandle.widthAnchor.constraint(equalToConstant: 28),
+            rightResizeHandle.heightAnchor.constraint(equalToConstant: 28)
         ])
         dragHandle.onClick = { [weak self] in
             guard let self else { return }
@@ -257,6 +297,8 @@ final class ShelfWindowController {
             self?.beginMoving()
         }
         dragHandle.onEndDragging = { [weak self] in self?.endMoving() }
+        leftResizeHandle.onResize = { [weak self] event in self?.resize(from: event, edge: .left) }
+        rightResizeHandle.onResize = { [weak self] event in self?.resize(from: event, edge: .right) }
         dragHandle.updateAccessibilityLabels()
         panel.onHide = { [weak self] in self?.hide() }
         // A collapsed browser retains selection, but its hidden rows must not receive edits.
@@ -356,13 +398,25 @@ final class ShelfWindowController {
     }
 
     private func resizeForPresentation() {
-        finishExpansionAnimation()
-        guard !isCollapsed, panel.isVisible, let screen = panel.screen ?? NSScreen.main else { return }
-        let frame = dockedFrame(for: ShelfLayout.windowSize(for: store.presentation))
-            ?? ShelfGeometry.resizedFrame(panel.frame, size: ShelfLayout.windowSize(for: store.presentation),
-                                               in: screen.visibleFrame.insetBy(dx: 12, dy: 12))
-        guard frame != panel.frame else { return }
-        setFrame(frame, animated: true)
+        // Category and grid/list changes never resize the shared window.
+    }
+
+    private func resize(from event: NSEvent, edge: ShelfResizeHandle.Edge) {
+        guard !isCollapsed, let screen = panel.screen ?? NSScreen.main else { return }
+        let point = NSEvent.mouseLocation
+        let minSize = CGSize(width: 320, height: 260)
+        var frame = panel.frame
+        switch edge {
+        case .left:
+            let right = frame.maxX
+            frame.origin.x = min(point.x, right - minSize.width)
+            frame.size.width = right - frame.minX
+        case .right:
+            frame.size.width = max(minSize.width, point.x - frame.minX)
+        }
+        frame.size.height = max(minSize.height, frame.height + (event.deltaY * -1))
+        frame.origin.y = max(screen.visibleFrame.minY, min(frame.origin.y, screen.visibleFrame.maxY - frame.height))
+        setFrame(frame, animated: false)
     }
 
     private func setFrame(_ frame: CGRect, animated: Bool) {

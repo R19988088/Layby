@@ -7,6 +7,9 @@
 build/
 dist/
 
+# Local Files
+local/
+
 # Xcode build output and test results
 DerivedData/
 *.xcarchive/

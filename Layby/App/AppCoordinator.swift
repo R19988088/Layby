@@ -22,6 +22,7 @@ final class AppCoordinator: NSObject {
 
     func start() {
         L10n.configure(settings.language)
+        store.switchCategory(.desktop)
         installMenus()
         settings.onChange = { [weak self] in self?.applySettings() }
         hotKey.onPress = { [weak self] in self?.showShelf() }

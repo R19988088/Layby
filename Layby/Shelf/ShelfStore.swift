@@ -14,6 +14,10 @@ enum ShelfPresentation {
     var isExpanded: Bool { self != .stack }
 }
 
+enum ShelfCategory: String, CaseIterable {
+    case desktop, temporary
+}
+
 enum ShelfDragScope {
     case all
     case item(UUID)
@@ -53,9 +57,12 @@ final class ShelfStore {
     var notice: String?
     private(set) var presentation: ShelfPresentation = .stack { didSet { onPreviewChange?() } }
     let folderBrowser = ShelfFolderBrowser()
+    let desktopBrowser = ShelfFolderBrowser()
+    var category: ShelfCategory = .temporary
     var gridColumnCount = 1
     @ObservationIgnored var onPreviewChange: (() -> Void)?
     @ObservationIgnored private var selectionAnchor: UUID?
+    @ObservationIgnored private var desktopLoaded = false
     @ObservationIgnored let managedFiles: ManagedFileStore
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var imports: [UUID: NSFilePromiseReceiver] = [:]
@@ -71,16 +78,87 @@ final class ShelfStore {
 
     init(managedFiles: ManagedFileStore = ManagedFileStore()) {
         self.managedFiles = managedFiles
+        presentation = .grid
         folderBrowser.onChange = { [weak self] in self?.onPreviewChange?() }
+        desktopBrowser.onChange = { [weak self] in self?.onPreviewChange?() }
     }
 
     var readyItems: [ShelfItem] { items.filter { $0.state.isReady } }
-    var isBrowsingFolder: Bool { folderBrowser.directory != nil }
-    var visibleItems: [ShelfItem] { isBrowsingFolder ? folderBrowser.items : items }
+    var activeBrowser: ShelfFolderBrowser { category == .desktop ? desktopBrowser : folderBrowser }
+    var isBrowsingFolder: Bool { category == .desktop ? desktopBrowser.depth > 1 : folderBrowser.directory != nil }
+    var visibleItems: [ShelfItem] { category == .desktop ? desktopBrowser.items : (folderBrowser.directory != nil ? folderBrowser.items : items) }
     var visibleReadyItems: [ShelfItem] { visibleItems.filter { $0.state.isReady } }
     var selectedItems: [ShelfItem] { visibleReadyItems.filter { selection.contains($0.id) } }
     var previewItems: [ShelfItem] { presentation.isExpanded ? selectedItems : [] }
     var exportItems: [ShelfItem] { selection.isEmpty ? visibleReadyItems : selectedItems }
+    var showsDirectoryStatus: Bool {
+        (category == .desktop || isBrowsingFolder) &&
+        (activeBrowser.isLoading || activeBrowser.error != nil || visibleItems.isEmpty)
+    }
+
+    private var desktopDirectoryURL: URL {
+        // Named-user lookup avoids the sandbox container's home directory.
+        URL(fileURLWithPath: NSHomeDirectoryForUser(NSUserName()) ?? NSHomeDirectory(), isDirectory: true)
+            .appendingPathComponent("Desktop", isDirectory: true)
+    }
+
+    func authorizeDesktop() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = desktopDirectoryURL
+        panel.prompt = "授权桌面"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard url.resolvingSymlinksInPath() == desktopDirectoryURL.resolvingSymlinksInPath() else {
+            notice = "请选择桌面目录。"
+            return
+        }
+        let lease = FileAccessLease(url: url)
+        do {
+            let bookmark = try url.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
+                                                includingResourceValuesForKeys: nil, relativeTo: nil)
+            UserDefaults.standard.set(bookmark, forKey: "desktopBookmark")
+            loadDesktop(lease)
+            notice = nil
+        } catch {
+            loadDesktop(lease)
+            notice = "桌面授权无法保存，下次启动需要重新授权。"
+        }
+    }
+
+    func loadDesktop(_ lease: FileAccessLease) {
+        desktopBrowser.reset()
+        desktopBrowser.enter(ShelfItem(id: UUID(), url: lease.url, name: lease.url.lastPathComponent,
+            subtitle: "桌面", state: .ready, icon: NSWorkspace.shared.icon(for: .folder),
+            isDirectory: true, lease: lease))
+        desktopLoaded = true
+        clearSelection()
+    }
+
+    func switchCategory(_ category: ShelfCategory) {
+        guard self.category != category else { return }
+        selection.removeAll()
+        folderBrowser.reset()
+        self.category = category
+        if category == .desktop {
+            if !desktopLoaded {
+                var desktopURL = desktopDirectoryURL
+                if let bookmark = UserDefaults.standard.data(forKey: "desktopBookmark") {
+                    var stale = false
+                    if let restored = try? URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope],
+                                               relativeTo: nil, bookmarkDataIsStale: &stale) {
+                        desktopURL = restored
+                    }
+                }
+                loadDesktop(FileAccessLease(url: desktopURL))
+            }
+            presentation = .grid
+            desktopBrowser.reload()
+        } else if items.isEmpty {
+            presentation = .stack
+        }
+    }
 
     var selectionSummary: String? {
         let selected = visibleItems.filter { selection.contains($0.id) }
@@ -122,8 +200,8 @@ final class ShelfStore {
     }
 
     func present(_ presentation: ShelfPresentation) {
-        if presentation == .stack { resetFolderBrowsing() }
-        self.presentation = items.isEmpty ? .stack : presentation
+        if presentation == .stack, category == .temporary { resetFolderBrowsing() }
+        self.presentation = category == .desktop ? (presentation == .stack ? .grid : presentation) : (items.isEmpty ? .stack : presentation)
         selection.removeAll()
     }
 
@@ -167,7 +245,7 @@ final class ShelfStore {
         items.removeAll { ids.contains($0.id) }
         selection.subtract(ids)
         if let selectionAnchor, ids.contains(selectionAnchor) { self.selectionAnchor = nil }
-        if items.isEmpty { presentation = .stack }
+        if items.isEmpty, category == .temporary { presentation = .stack }
     }
 
     func clear() {
@@ -180,7 +258,7 @@ final class ShelfStore {
         selection.removeAll()
         isDropTargeted = false
         notice = nil
-        presentation = .stack
+        presentation = category == .desktop ? .grid : .stack
     }
 
     /// Called exclusively by a real drop callback. Owned promise files carry their directory lease.
@@ -273,7 +351,7 @@ final class ShelfStore {
 
     /// SwiftUI requests previews for visible rows only; the model retains no unbounded global cache.
     func requestThumbnail(_ id: UUID) {
-        guard thumbnails[id] == nil, let item = (items + folderBrowser.items).first(where: { $0.id == id }),
+        guard thumbnails[id] == nil, let item = (items + folderBrowser.items + desktopBrowser.items).first(where: { $0.id == id }),
               item.state.isReady, !item.isDirectory, let lease = item.lease else { return }
         let request = QLThumbnailGenerator.Request(fileAt: lease.url, size: CGSize(width: 160, height: 180),
                                                   scale: 2, representationTypes: .thumbnail)
@@ -285,7 +363,11 @@ final class ShelfStore {
                 guard let self, self.generation == expected, let representation else { return }
                 if let index = self.items.firstIndex(where: { $0.id == id }) {
                     self.items[index].icon = representation.nsImage
-                } else { self.folderBrowser.updateThumbnail(id, image: representation.nsImage) }
+                } else if self.folderBrowser.items.contains(where: { $0.id == id }) {
+                    self.folderBrowser.updateThumbnail(id, image: representation.nsImage)
+                } else {
+                    self.desktopBrowser.updateThumbnail(id, image: representation.nsImage)
+                }
             }
         }
     }
@@ -296,10 +378,14 @@ final class ShelfStore {
         cancelFolderThumbnails()
         clearSelection()
         notice = nil
-        folderBrowser.enter(directory)
+        activeBrowser.enter(directory)
     }
 
     func goBack() {
+        if category == .desktop {
+            if desktopBrowser.depth > 1 { desktopBrowser.back(); clearSelection() }
+            return
+        }
         guard let directory = folderBrowser.directory else { present(.stack); return }
         cancelFolderThumbnails()
         clearSelection()
@@ -310,7 +396,7 @@ final class ShelfStore {
     func reloadFolder() {
         cancelFolderThumbnails()
         clearSelection()
-        folderBrowser.reload()
+        activeBrowser.reload()
     }
 
     func removeSelection() {

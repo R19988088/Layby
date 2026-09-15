@@ -4,6 +4,25 @@ import Testing
 
 @MainActor @Suite(.serialized)
 struct FolderBrowserTests {
+    @Test func desktopListingDoesNotDependOnTemporaryItems() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data("desktop".utf8).write(to: root.appendingPathComponent("desktop.txt"))
+        let store = ShelfStore()
+        store.loadDesktop(FileAccessLease(url: root))
+        store.category = .desktop
+        for _ in 0..<200 where store.desktopBrowser.isLoading {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(store.items.isEmpty)
+        #expect(store.visibleItems.map(\.name) == ["desktop.txt"])
+        #expect(!store.showsDirectoryStatus)
+        store.present(.list)
+        #expect(store.presentation == .list)
+        store.present(.grid)
+        #expect(store.presentation == .grid)
+    }
+
     private func fixture() throws -> URL {
         let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent("LaybyFolders-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

@@ -2,7 +2,8 @@ import AppKit
 import QuartzCore
 
 enum ShelfLayout {
-    static let size = CGSize(width: 200, height: 220)
+    // One expanded frame for every category and content layout.
+    static let size = CGSize(width: 500, height: 360)
     static let expandedSize = CGSize(width: 500, height: 360)
     static let capsuleSize = CGSize(width: 108, height: 20)
     static let capsuleCornerRadius: CGFloat = 10
