@@ -173,8 +173,16 @@ struct SettingsView: View {
                     ForEach(AppLanguage.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.menu)
+                LabeledContent(L10n.text("玻璃不透明度")) {
+                    HStack {
+                        Slider(value: $settings.glassOpacity, in: 0...0.8, step: 0.05)
+                        Text("\(Int(settings.glassOpacity * 100))%")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
             } footer: {
-                Text(L10n.text("选择应用的显示语言，更改后立即生效。"))
+                Text(L10n.text("选择应用的显示语言，更改后立即生效；玻璃不透明度只影响停放区背景。"))
             }
         }
         .formStyle(.grouped)

@@ -11,7 +11,7 @@ final class AppCoordinator: NSObject {
     @ObservationIgnored private(set) lazy var observation = DragObservationService(settings: settings, store: store)
     @ObservationIgnored private lazy var hotKey = GlobalHotKeyService()
     @ObservationIgnored private lazy var notch = NotchDropController(store: store, settings: settings)
-    @ObservationIgnored private lazy var shelf = ShelfWindowController(store: store)
+    @ObservationIgnored private lazy var shelf = ShelfWindowController(store: store, glassOpacity: settings.glassOpacity)
     @ObservationIgnored private let desktopIcons = DesktopIconHider()
     @ObservationIgnored private var settingsWindow: NSWindow?
     @ObservationIgnored private var statusItem: NSStatusItem?
@@ -128,6 +128,7 @@ final class AppCoordinator: NSObject {
         installMenus()
         settingsWindow?.title = L10n.text("Layby 设置")
         shelf.panel.title = L10n.text("Layby 文件停放区")
+        shelf.setGlassOpacity(settings.glassOpacity)
         let status = hotKey.register(settings.hotKeyEnabled ? settings.shortcut : nil)
         hotKeyMessage = status == 0 ? nil : L10n.format("快捷键无法注册（%d），请更换组合键。", status)
         if observation.isTracking { notch.setActive(true) }
@@ -196,6 +197,9 @@ final class AppCoordinator: NSObject {
         let support = menu.addItem(withTitle: L10n.text("给 Layby 一颗 Star"), action: #selector(openRepository), keyEquivalent: "")
         support.image = NSImage(systemSymbolName: "star", accessibilityDescription: nil)
         menu.addItem(.separator())
+        let desktopIcons = menu.addItem(withTitle: L10n.text("隐藏图标"), action: #selector(toggleDesktopIcons), keyEquivalent: "")
+        desktopIcons.target = self
+        desktopIcons.state = self.desktopIcons.isHidden ? .on : .off
         let quit = menu.addItem(withTitle: L10n.text("退出 Layby"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         for item in menu.items where item.action != nil { item.target = item == quit ? NSApp : self }
         let statusItem = self.statusItem ?? NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -221,6 +225,11 @@ final class AppCoordinator: NSObject {
         editItem.submenu = edit
         NSApp.mainMenu = main
         if let applicationMenu = applicationItem.submenu { ShelfServicesController.installMenu(in: applicationMenu) }
+    }
+
+    @objc private func toggleDesktopIcons() {
+        desktopIcons.toggle()
+        installMenus()
     }
 
     private static func drawMenuBarIcon() -> NSImage {

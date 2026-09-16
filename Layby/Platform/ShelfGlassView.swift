@@ -12,6 +12,7 @@ final class ShelfGlassView: NSView {
         didSet { refreshContentAppearance() }
     }
     private var retainedAppearance: NSAppearance?
+    var opacity: Double = 0.35 { didSet { refreshOpacity() } }
     var expandedSize = ShelfLayout.size { didSet { needsLayout = true } }
     var isCollapsed = false {
         didSet {
@@ -38,6 +39,7 @@ final class ShelfGlassView: NSView {
         addSubview(capsuleEffect)
         capsuleEffect.isHidden = true
         capsuleContent.onAppearanceChange = { [weak self] _ in self?.refreshContentAppearance() }
+        refreshOpacity()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -45,7 +47,7 @@ final class ShelfGlassView: NSView {
     private static func makeEffect(content: NSView, radius: CGFloat) -> NSView {
         if #available(macOS 26.0, *) {
             let effect = NSGlassEffectView()
-            effect.style = .regular
+            effect.style = .clear
             effect.cornerRadius = radius
             effect.contentView = content
             return effect
@@ -105,6 +107,18 @@ final class ShelfGlassView: NSView {
         // Never override the capsule renderer: native glass must remain free to adapt.
         expandedEffect.appearance = contentAppearance
         expandedContent.appearance = contentAppearance
+        refreshOpacity()
         onContentAppearanceChange?(contentAppearance)
+    }
+
+    private func refreshOpacity() {
+        let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let tint = NSColor(white: isDark ? 0 : 1, alpha: CGFloat(max(0, min(opacity, 0.8))))
+        if #available(macOS 26.0, *) {
+            if let effect = expandedEffect as? NSGlassEffectView { effect.tintColor = tint }
+            if let effect = capsuleEffect as? NSGlassEffectView { effect.tintColor = tint }
+        }
+        expandedContent.layer?.backgroundColor = tint.cgColor
+        capsuleContent.layer?.backgroundColor = tint.cgColor
     }
 }

@@ -120,7 +120,7 @@ private final class ShelfResizeHandle: NSView {
     override func mouseUp(with event: NSEvent) { startPoint = nil }
 }
 
-/// A transparent window surface with an explicit rounded shadow, independent of key state.
+/// Transparent window surface; the panel owns its native system shadow.
 @MainActor
 final class ShelfSurfaceView: NSView {
     private static let appearanceAnimationKey = "layby.appearance"
@@ -133,20 +133,12 @@ final class ShelfSurfaceView: NSView {
         focusRingType = .none
         layer?.backgroundColor = NSColor.clear.cgColor
         layer?.masksToBounds = false
-        layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowOpacity = 0.30
-        layer?.shadowRadius = 9
-        layer?.shadowOffset = CGSize(width: 0, height: -3)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override func layout() {
         super.layout()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        layer?.shadowPath = CGPath(roundedRect: bounds.insetBy(dx: ShelfLayout.shadowInset, dy: ShelfLayout.shadowInset),
-                                  cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
-        CATransaction.commit()
+        // Native NSWindow shadow is not tied to the view's backing layer.
     }
 
     func animateAppearance(reduceMotion: Bool) {
@@ -224,7 +216,8 @@ final class ShelfWindowController {
     var onBeginMoving: (() -> Void)?
     var onCollapse: (() -> Void)?
 
-    init(store: ShelfStore, dockTargets: @escaping @MainActor () -> [ShelfDockTarget] = { ShelfDockTarget.currentScreens() }) {
+    init(store: ShelfStore, glassOpacity: Double = 0.35,
+         dockTargets: @escaping @MainActor () -> [ShelfDockTarget] = { ShelfDockTarget.currentScreens() }) {
         self.store = store
         services = ShelfServicesController(store: store)
         self.dockTargets = dockTargets
@@ -239,15 +232,14 @@ final class ShelfWindowController {
         panel.hidesOnDeactivate = false
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        // WindowServer's shadow can outline the rectangular backing surface when it becomes key.
-        // Draw a rounded shadow in our transparent surface instead.
-        panel.hasShadow = false
+        panel.hasShadow = true
         panel.isMovableByWindowBackground = false
         panel.acceptsMouseMovedEvents = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
         destination = DropDestinationView(store: store)
         surface = ShelfSurfaceView(frame: CGRect(origin: .zero, size: ShelfLayout.windowSize))
+        glass.opacity = glassOpacity
         panel.contentView = surface
         glass.translatesAutoresizingMaskIntoConstraints = false
         surface.addSubview(glass)
@@ -324,6 +316,10 @@ final class ShelfWindowController {
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.updateAccessibility() }
             }
+    }
+
+    func setGlassOpacity(_ opacity: Double) {
+        glass.opacity = opacity
     }
 
     private func installShelfContent() {
@@ -492,20 +488,6 @@ final class ShelfWindowController {
         }
         // The capsule has no interior content to reveal. Keep its chrome hidden
         // until the surrounding glass reaches its final shape.
-        let shadow = CABasicAnimation(keyPath: "shadowPath")
-        shadow.fromValue = surface.layer?.shadowPath
-        let target = CGRect(x: frame.minX - panel.frame.minX + ShelfLayout.shadowInset,
-                            y: frame.minY - panel.frame.minY + ShelfLayout.shadowInset,
-                            width: frame.width - ShelfLayout.shadowInset * 2,
-                            height: frame.height - ShelfLayout.shadowInset * 2)
-        shadow.toValue = CGPath(roundedRect: target, cornerWidth: ShelfLayout.capsuleCornerRadius,
-                               cornerHeight: ShelfLayout.capsuleCornerRadius, transform: nil)
-        shadow.duration = ShelfLayout.collapseDuration
-        shadow.timingFunction = shrink.timingFunction
-        shadow.fillMode = .forwards
-        shadow.isRemovedOnCompletion = false
-        surface.layer?.add(shadow, forKey: Self.collapseAnimationKey)
-
         collapseAnimation = Task { [weak self] in
             try? await Task.sleep(for: .seconds(ShelfLayout.collapseDuration))
             guard !Task.isCancelled else { return }
@@ -620,16 +602,6 @@ final class ShelfWindowController {
                 finalScale: CGSize(width: 0.005, height: 0.005), fades: true, expanding: true) {
             contentLayer.add(incoming, forKey: Self.expansionAnimationKey)
         }
-        let compactRect = CGRect(x: surface.bounds.midX - ShelfLayout.capsuleSize.width / 2,
-                                 y: surface.bounds.maxY - ShelfLayout.shadowInset - ShelfLayout.capsuleSize.height,
-                                 width: ShelfLayout.capsuleSize.width, height: ShelfLayout.capsuleSize.height)
-        let shadow = CABasicAnimation(keyPath: "shadowPath")
-        shadow.fromValue = CGPath(roundedRect: compactRect, cornerWidth: ShelfLayout.capsuleCornerRadius,
-                                  cornerHeight: ShelfLayout.capsuleCornerRadius, transform: nil)
-        shadow.toValue = surface.layer?.shadowPath
-        shadow.duration = ShelfLayout.collapseDuration
-        shadow.timingFunction = release.timingFunction
-        surface.layer?.add(shadow, forKey: Self.expansionAnimationKey)
         expansionAnimation = Task { [weak self] in
             try? await Task.sleep(for: .seconds(ShelfLayout.collapseDuration))
             guard !Task.isCancelled else { return }

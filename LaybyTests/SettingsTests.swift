@@ -38,6 +38,16 @@ struct SettingsTests {
         #expect(AppSettings(defaults: defaults).language == .system)
     }
 
+    @Test func glassOpacityPersists() throws {
+        let suite = "Layby.SettingsTests.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = AppSettings(defaults: defaults)
+        #expect(settings.glassOpacity == 0.35)
+        settings.glassOpacity = 0.6
+        #expect(AppSettings(defaults: defaults).glassOpacity == 0.6)
+    }
+
     @Test func systemLanguageUsesSupportedPreferencesAndOverridesWin() {
         #expect(AppLanguage.system.resolved(preferredLanguages: ["zh-Hant-TW", "en-US"]) == .chinese)
         #expect(AppLanguage.system.resolved(preferredLanguages: ["en-GB", "zh-Hans"]) == .english)

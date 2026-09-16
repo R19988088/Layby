@@ -44,6 +44,7 @@ final class AppSettings {
     var modifier: DragModifier { didSet { save() } }
     var shortcut: HotKeyShortcut { didSet { save() } }
     var excludedBundleIDs: String { didSet { save() } }
+    var glassOpacity: Double { didSet { save() } }
     @ObservationIgnored var onChange: (() -> Void)?
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -61,6 +62,7 @@ final class AppSettings {
         modifier = DragModifier(rawValue: defaults.string(forKey: "modifier") ?? "") ?? .shift
         shortcut = defaults.data(forKey: "shortcut").flatMap { try? JSONDecoder().decode(HotKeyShortcut.self, from: $0) } ?? .standard
         excludedBundleIDs = defaults.string(forKey: "excludedBundleIDs") ?? ""
+        glassOpacity = defaults.object(forKey: "glassOpacity") as? Double ?? 0.35
     }
 
     func excludes(_ bundleID: String?) -> Bool {
@@ -79,6 +81,7 @@ final class AppSettings {
         defaults.set(modifier.rawValue, forKey: "modifier")
         defaults.set(try? JSONEncoder().encode(shortcut), forKey: "shortcut")
         defaults.set(excludedBundleIDs, forKey: "excludedBundleIDs")
+        defaults.set(glassOpacity, forKey: "glassOpacity")
         onChange?()
     }
 }
